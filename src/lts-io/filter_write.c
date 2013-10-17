@@ -45,11 +45,15 @@ static void write_init(lts_file_t file,int seg,void* state){
 
 static void write_edge(lts_file_t file,int src_seg,void* src_state,
                            int dst_seg,void*dst_state,void* labels){
-    uint32_t new_labels[file->edge_count];
-    for(int i=0;i<file->edge_count;i++){
-        new_labels[i]=((uint32_t*)labels)[file->edge_proj[i]];
+    if(!labels) {
+        lts_write_edge(file->filtered,src_seg,src_state,dst_seg,dst_state,labels);
+    } else {
+        uint32_t new_labels[file->edge_count];
+        for(int i=0;i<file->edge_count;i++){
+            new_labels[i]=((uint32_t*)labels)[file->edge_proj[i]];
+        }
+        lts_write_edge(file->filtered,src_seg,src_state,dst_seg,dst_state,new_labels);
     }
-    lts_write_edge(file->filtered,src_seg,src_state,dst_seg,dst_state,new_labels);
 }
 
 static void write_close(lts_file_t file){
