@@ -186,6 +186,7 @@ static void lts_read_dir(archive_t archive,lts_t lts){
 #define LTS_GCD 12
 #define LTS_PG  13
 #define LTS_IMCA 14
+#define LTS_DOT 15
 
 static int lts_guess_format(char *name){
     char *lastdot=strrchr(name,'.');
@@ -205,6 +206,7 @@ static int lts_guess_format(char *name){
     if (!strcmp(lastdot,"pg")) return LTS_PG;
     if (!strcmp(lastdot,"gm")) return LTS_PG;
     if (!strcmp(lastdot,"ma")) return LTS_IMCA;
+    if (!strcmp(lastdot,"dot")) return LTS_DOT;
     Abort("unknown extension %s",lastdot);
 }
 
