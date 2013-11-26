@@ -28,52 +28,57 @@ struct lts_file_s {
 
 static int thinkItIsAString(const char* str, int len) {
 	const char* p = str;
-	while(p<(str+len) && isgraph(*p)) {
+	while(p<(str+len) && *p && isprint(*p)) {
 		p++;
 	}
 	//return (p==(str+len) && len>0);
 	if(p<str+len) {
-		return len>0 && (*p=='\0');
+		//printf("not graph: %i %c\n", *p, *p);
+		return len>0 && p+1==str+len;
 	} else {
 		return len>0;
 	}
 }
 
+static void printMessage(FILE* file, const char* s, size_t len) {
+	if(!s) {
+		fprintf(file, "(null) [0]");
+	} else if(thinkItIsAString(s, len)) {
+		char* copy = malloc(len*2);
+		char* src = s;
+		char* dst = copy;
+		while(src<s+len) {
+			switch(*src) {
+				case '|':
+				case '{':
+				case '}':
+				case '"':
+					*dst++ = '\\';
+					*dst++ = *src;
+					break;
+				default:
+					*dst++ = *src;
+					break;
+			}
+			src++;
+		}
+		*dst = '\0';
+		fprintf(file, "%s", copy);
+		free(copy);
+	} else {
+//			fprintf(file->file, "[%i]", name, lts_type_get_type(lts_file_get_type(file), typeNo), value);
+		for(size_t j=0; j<len; j+=4) {
+			fprintf(file, "%x%x%x%x ", s[j], s[j+1], s[j+2], s[j+3]);
+		}
+		fprintf(file, "[%i]", len);
+	}
+}
+
 static void printChunkType(lts_file_t file, int typeNo, int value) {
 	if(lts_type_get_format(lts_file_get_type(file), typeNo)==LTStypeChunk) {
-		printf("DOING %i\n", typeNo);
 		value_table_t table = lts_file_get_table(file,typeNo);
 		chunk c = VTgetChunk(table, value);
-		if(!c.data) {
-		} else if(thinkItIsAString(c.data, c.len)) {
-			char* copy = malloc(c.len*2);
-			char* src = c.data;
-			char* dst = copy;
-			while(src<c.data+c.len) {
-				switch(*src) {
-					case '|':
-					case '{':
-					case '}':
-					case '"':
-						*dst++ = '\\';
-						*dst++ = '"';
-						break;
-					default:
-						*dst++ = *src;
-						break;
-				}
-				src++;
-			}
-			*dst = '\0';
-			fprintf(file->file, "%s", copy);
-			free(copy);
-		} else {
-//			fprintf(file->file, "[%i]", name, lts_type_get_type(lts_file_get_type(file), typeNo), value);
-			for(size_t j=0; j<c.len; ++j) {
-				fprintf(file->file, "%x", c.data[j]);
-			}
-			fprintf(file->file, "[%i]", c.len);
-		}
+		printMessage(file->file, c.data, c.len);
 	} else {
 		fprintf(file->file, "%i", value);
 	}
@@ -173,12 +178,12 @@ static void dot_write_edge(lts_file_t file,int src_seg,void* src_state, int dst_
 		chunk label_c = VTgetChunk(file->labelAction,lbl[file->labelActionIndex]);
 //			chunk2string(label_c,sizeof label_s,label_s);
 //		}
-		if(label_c.data) fprintf(file->file, ", label = \"%s\"", label_c.data);
+		if(label_c.data && label_c.len>0) fprintf(file->file, ", label = \"%s\"", label_c.data);
 	}
 	if (file->labelCustomDot && labels) {
 		uint32_t* lbl=((uint32_t*)labels);
 		chunk label_c = VTgetChunk(file->labelCustomDot,lbl[file->labelCustomDotIndex]);
-		if(label_c.data) fprintf(file->file, ", %s", label_c.data);
+		if(label_c.data && label_c.len>0) fprintf(file->file, ", %s", label_c.data);
 	}
 	fprintf(file->file, " ];\n");
 //    char *bcg_label;
@@ -266,11 +271,14 @@ static void dot_write_state(lts_file_t file,int seg,__uint32_t *state,__uint32_t
 		if (file->stateErrorMessage) {
 			uint32_t* lbl=((uint32_t*)state);
 			chunk label_c = VTgetChunk(file->stateErrorMessage,lbl[file->stateErrorMessageIndex]);
-			if(label_c.data && *label_c.data) fprintf(file->file, "|Error: %s", label_c.data);
+			if(label_c.data && *label_c.data && label_c.len>0) {
+				fprintf(file->file, "|Error: ");
+				printMessage(file->file, label_c.data, label_c.len);
+			}
 		} else if (file->stateLabelErrorMessage && labels) {
 			uint32_t* lbl=((uint32_t*)labels);
 			chunk label_c = VTgetChunk(file->stateLabelErrorMessage,lbl[file->stateLabelErrorMessageIndex]);
-			if(label_c.data && *label_c.data) fprintf(file->file, "|Error: %s", label_c.data);
+			if(label_c.data && *label_c.data && label_c.len>0) fprintf(file->file, "|Error: %s", label_c.data);
 		}
 		fprintf(file->file,"}");
 //	} else {
@@ -292,10 +300,12 @@ static void dot_write_state(lts_file_t file,int seg,__uint32_t *state,__uint32_t
 		uint32_t* lbl=((uint32_t*)labels);
 		chunk label_c = VTgetChunk(file->stateLabelCustomDot,lbl[file->stateLabelCustomDotIndex]);
 		if(label_c.data) {
-			if(label_c.len>0 && label_c.data[0]==',') {
-				fprintf(file->file, "%s", label_c.data);
-			} else {
-				fprintf(file->file, ", %s", label_c.data);
+			if(label_c.len>0) {
+				if(label_c.data[0]==',') {
+					fprintf(file->file, "%s", label_c.data);
+				} else {
+					fprintf(file->file, ", %s", label_c.data);
+				}
 			}
 		}
 	}
