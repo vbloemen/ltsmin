@@ -100,7 +100,7 @@ static void dot_read_close(lts_file_t file) {
 
 static void dot_write_init(lts_file_t file,int seg,void* state) {
 	//uint32_t root=*((uint32_t*)state);
-	if (seg!=0) Abort("bad initial state %u",seg);
+	//if (seg!=0) Abort("bad initial state %u",seg);
 	int index = 0;
 	index = lts_type_get_edge_label_count(lts_file_get_type(file));
 	while(index-- && strcmp("action",lts_type_get_edge_label_name(lts_file_get_type(file),index)));
