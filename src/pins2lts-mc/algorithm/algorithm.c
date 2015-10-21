@@ -21,7 +21,7 @@ num_global_bits (strategy_t s)
     return (Strat_ENDFS  & s ? 3 :
            ((Strat_CNDFS | Strat_DFSFIFO) & s ? 2 :
            ((Strat_LNDFS | Strat_OWCTY | Strat_TA) & s ? 1 :
-           ((Strat_TARJAN | Strat_UFSCC | Strat_RENAULT ) & s ? 1 :
+           ( Strat_TARJAN & s ? 1 :
            ((Strat_DFS & s) && proviso == Proviso_Stack ? 1 : 0) ))));
 }
 
@@ -36,10 +36,10 @@ get_strategy (alg_t *alg)
 }
 
 int
-alg_state_new_default (void *ctx, ref_t ref, int seen)
+alg_state_new_default (void *ctx, transition_info_t *ti, ref_t ref, int seen)
 {
     return seen;
-    (void) ref; (void) ctx;
+    (void) ref; (void) ctx; (void) ti;
 }
 
 void

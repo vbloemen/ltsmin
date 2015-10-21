@@ -17,7 +17,7 @@
 
 /* permute_get_transitions is a replacement for GBgetTransitionsLong
  */
-#define                     TODO_MAX 200
+#define                     TODO_MAX 10000
 
 typedef enum {
     Perm_None,      /* normal group order */
@@ -36,7 +36,8 @@ extern si_map_entry permutations[];
 
 extern struct poptOption perm_options[];
 
-typedef int             (*alg_state_seen_f) (void *ctx, ref_t ref, int seen);
+typedef int             (*alg_state_seen_f) (void *ctx, transition_info_t *ti,
+                                             ref_t ref, int seen);
 
 typedef void            (*perm_cb_f)    (void *context, state_info_t *dst,
                                          transition_info_t *ti, int seen);
