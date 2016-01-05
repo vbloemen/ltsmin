@@ -14,6 +14,15 @@ char            *inv_detect = NULL;
 int              no_exit = 0;
 size_t           max_level = SIZE_MAX;
 
+// This option will print the entire state space as an edge-list
+// in the form "state -> successor" per line
+#define PRINT_GRAPH
+
+#ifdef PRINT_GRAPH
+int              n_edges = 0;
+#endif
+
+
 struct poptOption reach_options[] = {
     {"deadlock", 'd', POPT_ARG_VAL, &dlk_detect, 1, "detect deadlocks", NULL },
     {"action", 'a', POPT_ARG_STRING, &act_detect, 0,"detect error action", NULL },
@@ -164,6 +173,12 @@ reach_queue (void *arg, state_info_t *successor, transition_info_t *ti, int new)
     alg_local_t        *loc = ctx->local;
     alg_global_t       *sm = ctx->global;
     alg_shared_t       *shared = ctx->run->shared;
+
+#ifdef PRINT_GRAPH
+    if (n_edges>0)
+        printf("%zu -> %zu\n", ctx->state->ref, successor->ref);
+    n_edges ++;
+#endif
 
     if (new) {
         raw_data_t stack_loc = dfs_stack_push (sm->out_stack, NULL);
