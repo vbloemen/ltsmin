@@ -16,11 +16,25 @@ size_t           max_level = SIZE_MAX;
 
 // This option will print the entire state space as an edge-list
 // in the form "state -> successor" per line
-#define PRINT_GRAPH
-
+//#define PRINT_GRAPH
 #ifdef PRINT_GRAPH
 int              n_edges = 0;
 #endif
+
+// This option will output log info in a CSV format
+#define LOG_OUTPUT
+#ifdef LOG_OUTPUT
+#include <time.h>
+int              n_edges = 0;
+struct timespec starttime, endtime;
+
+long long timespecDiff(struct timespec *timeA_p, struct timespec *timeB_p)
+{
+  return ((timeA_p->tv_sec * 1000000000) + timeA_p->tv_nsec) -
+           ((timeB_p->tv_sec * 1000000000) + timeB_p->tv_nsec);
+}
+#endif
+
 
 
 struct poptOption reach_options[] = {
@@ -180,6 +194,17 @@ reach_queue (void *arg, state_info_t *successor, transition_info_t *ti, int new)
     n_edges ++;
 #endif
 
+/*#ifdef LOG_OUTPUT
+    // don't print the initial state edge
+    if (n_edges>0){ 
+        // get the timing info and print the log info
+        clock_gettime(CLOCK_REALTIME, &endtime);
+        long long nsec = timespecDiff(&endtime, &starttime);
+        printf("%zu,%zu,%zu,%lld\n", ctx->state->ref, successor->ref, ctx->id, nsec);
+    }
+    n_edges ++;
+#endif*/
+
     if (new) {
         raw_data_t stack_loc = dfs_stack_push (sm->out_stack, NULL);
         state_info_serialize (successor, stack_loc);
@@ -235,6 +260,19 @@ explore_state (wctx_t *ctx, perm_cb_f cb)
 {
     alg_local_t        *loc = ctx->local;
     size_t              count;
+
+
+#ifdef LOG_OUTPUT
+    // don't print the initial state edge
+    if (n_edges>0){ 
+        // get the timing info and print the log info
+        clock_gettime(CLOCK_REALTIME, &endtime);
+        long long nsec = timespecDiff(&endtime, &starttime);
+        printf("%zu,%zu,%lld\n", ctx->state->ref, ctx->id, nsec);
+    }
+    n_edges ++;
+#endif
+
     if (ctx->counters->level_cur >= max_level)
         return;
 
@@ -576,6 +614,12 @@ reach_global_setup   (run_t *run, wctx_t *ctx)
 void
 reach_global_init   (run_t *run, wctx_t *ctx)
 {
+
+#ifdef LOG_OUTPUT
+    // startpoint for the timer
+    clock_gettime(CLOCK_REALTIME, &starttime);
+#endif
+
     ctx->global = RTmallocZero (sizeof(alg_global_t));
     reach_global_setup (run, ctx);
 }
