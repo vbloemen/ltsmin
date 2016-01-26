@@ -208,6 +208,9 @@ AC_SUBST([BUDDY_LDFLAGS])
 ACX_DDD([:],
   [AC_MSG_WARN([No libDDD installation found.])])
 
+ACX_SPOT([:],
+  [AC_MSG_WARN([No Spot installation found.])])
+
 ACX_CLINE_DEF([], [])
 
 AC_CHECK_LIB([rt], [aio_error])
@@ -423,6 +426,8 @@ AM_CONDITIONAL([HAVE_ATOMICS], [test x"$acx_atomics" = xyes])
 AM_CONDITIONAL([HAVE_VERSION_CONTROL], [test -d "${srcdir}/.git"])
 AM_CONDITIONAL([HAVE_LIBZIP], [test x"$acx_libzip" = xyes])
 AM_CONDITIONAL([HAVE_PROFILER], [test x"$acx_profiler" = xyes])
+AM_CONDITIONAL([HAVE_SPOT], [test x"$acx_spot" = xyes])
+AS_IF([test x"$acx_spot" = "xyes"], [AC_DEFINE([HAVE_SPOT], [1], [Define if using Spot.])])
 
 AM_CONDITIONAL(BUILD_OS_IS_DARWIN,
 [case "${build_os}" in
@@ -504,6 +509,7 @@ Configuration:
     PBES     = ${acx_pbes:-NOT FOUND, building without PBES support}
     SCOOP    = ${have_scoop:-NO, either scoop was disabled or ghc/happy/ghc-pkg/hashmap/deepseq could not be found}
     SPINS    = ${acx_spins:-NO, JDK or Ant not found (override with --with-spins)}
+    SPOT     = ${acx_spot:-NO, Spot not found (override with --with-spot)}
     SYLVAN   = ${have_sylvan:-NO, only on 64-bit systems (override with --with-sylvan)}
     XMLTO    = ${XMLTO:-NOT FOUND, not building manpages}
 ======================================================================
