@@ -464,6 +464,16 @@ extern int GBbuchiIsAccepting(model_t model, int* src);
 \brief Return accepting/not-accepting for a given state, false if undefined
 */
 
+extern void GBsetTGBAAcceptance(model_t model, int acc_set);
+/**<
+\brief Sets the TGBA acceptance condition
+*/
+
+extern int GBTGBAIsAccepting(model_t model, int acc_set);
+/**<
+\brief Return if the given acceptance set is equal to the ltsmin_buchi acceptance_set
+*/
+
 extern int GBgetProgressStateLabelIndex(model_t model);
 /**<
 \brief Get index of progress state label
