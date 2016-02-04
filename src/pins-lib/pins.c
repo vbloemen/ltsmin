@@ -29,6 +29,7 @@ struct grey_box_model {
     matrix_t *gnes_info; // guard necessary enabling set
     matrix_t *gnds_info; // guard necessary disabling set
     int sl_idx_buchi_accept;
+    int acceptance_set;
     int sl_idx_progress;
     int sl_idx_valid_end;
     int *group_visibility;
@@ -1372,6 +1373,18 @@ GBbuchiIsAccepting (model_t model, int *state)
 {
     return model->sl_idx_buchi_accept >= 0 &&
         GBgetStateLabelLong(model, model->sl_idx_buchi_accept, state);
+}
+
+void
+GBsetTGBAAcceptance (model_t model, int acc_set)
+{
+    model->acceptance_set = acc_set;
+}
+
+int
+GBTGBAIsAccepting (model_t model, int acc_set)
+{
+    return model->sl_idx_buchi_accept >= 0 && model->acceptance_set == acc_set;
 }
 
 int
