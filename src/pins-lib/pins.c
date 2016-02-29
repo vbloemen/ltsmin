@@ -30,6 +30,7 @@ struct grey_box_model {
     matrix_t *gnds_info; // guard necessary disabling set
     int sl_idx_buchi_accept;
     int acceptance_set;
+    int el_idx_acc_set;
     int sl_idx_progress;
     int sl_idx_valid_end;
     int *group_visibility;
@@ -404,6 +405,8 @@ model_t GBcreateBase(){
     model->gnes_info=NULL;
     model->gnds_info=NULL;
     model->sl_idx_buchi_accept = -1;
+    model->acceptance_set = 0;
+    model->el_idx_acc_set = -1;
     model->sl_idx_progress = -1;
     model->sl_idx_valid_end = -1;
 	model->s0=NULL;
@@ -1385,6 +1388,20 @@ int
 GBTGBAIsAccepting (model_t model, int acc_set)
 {
     return model->sl_idx_buchi_accept >= 0 && model->acceptance_set == acc_set;
+}
+
+int
+GBgetAccSetEdgeLabelIndex (model_t model)
+{
+    return model->el_idx_acc_set;
+}
+
+int
+GBsetAccSetEdgeLabelIndex (model_t model, int idx)
+{
+    int oldidx = model->el_idx_acc_set;
+    model->el_idx_acc_set = idx;
+    return oldidx;
 }
 
 int
