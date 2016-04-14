@@ -37,25 +37,92 @@ struct uf_state_s {
                                               // (one bit for each worker)
     ref_t               parent;               // the parent in the UF tree
     ref_t               list_next;            // next list item 'pointer'
-    uint32_t            acc_set;              // TGBA acceptance set
+    uint32_t            num_states;           // number of states in the SCC
     unsigned char       uf_status;            // the UF status of the state
     unsigned char       list_status;          // the list status
     char                pad[2];               // padding for data alignment
 };
 
+// a list of <scc_size,count> pairs to keep track of the SCC sizes
+typedef struct scc_size_list {
+    uint32_t                 scc_size;
+    uint32_t                 count;
+    struct scc_size_list    *next;
+} scc_size_list_t;
 
 /**
  * shared array of UF states
  */
 struct uf_s {
     uf_state_t         *array;                // array[ref_t] ->uf_state_t
+    scc_size_list_t    *list;
 };
 
 
 static bool      uf_lock_uf (const uf_t *uf, ref_t a);
 static void      uf_unlock_uf (const uf_t *uf, ref_t a);
-static bool      uf_lock_list (const uf_t *uf, ref_t a, ref_t *a_l);
+static bool      uf_lock_list (uf_t *uf, ref_t a, ref_t *a_l);
 static void      uf_unlock_list (const uf_t *uf, ref_t a_l);
+
+void
+print_scc_list (const uf_t *uf)
+{
+    Warning(info, "printing SCC list:");
+    scc_size_list_t *node = uf->list;
+    while (node != NULL) {
+        Warning(info, "SCC size: %d, count: %d", node->scc_size, node->count);
+        node = node->next;
+    }
+}
+
+
+void
+add_scc_list (uf_t *uf, uint32_t scc_size)
+{
+    // iterate over the list to find a position for scc_size
+    // and make sure that it is sorted from high to low
+
+    scc_size_list_t *node = uf->list;
+    scc_size_list_t *prev = uf->list;
+
+    // before first entry?
+    if (scc_size > node->scc_size) {
+        scc_size_list_t *new  = RTmalloc( sizeof(scc_size_list_t));
+        new->scc_size         = scc_size;
+        new->count            = 1;
+        new->next             = node;
+        uf->list              = new; 
+        return;
+    }
+
+    // somewhere in the middle of the list?
+    while (node != NULL) {
+        if (scc_size > node->scc_size) {
+            scc_size_list_t *new  = RTmalloc( sizeof(scc_size_list_t));
+            new->scc_size         = scc_size;
+            new->count            = 1;
+            new->next             = node;
+            prev->next            = new; 
+            return;
+        } else if (scc_size == node->scc_size) {
+            node->count ++;
+            return;
+        } else { // scc_size < node->scc_size
+            prev = node;
+            node = node->next;
+        }
+    }
+
+    // after first entry?
+    if (scc_size < prev->scc_size) {
+        scc_size_list_t *new  = RTmalloc( sizeof(scc_size_list_t));
+        new->scc_size         = scc_size;
+        new->count            = 1;
+        new->next             = NULL;
+        prev->next            = new; 
+        return;
+    }
+}
 
 /**
  * initializer for the UF array
@@ -71,6 +138,13 @@ uf_create ()
     // allocate one entry extra since [0] is not used
     uf->array              = RTalignZero (sizeof(int[8]),
                              sizeof (uf_state_t) * ( (1ULL << dbs_size) + 1 ) );
+
+    // allocate first entry of the SCC list
+    uf->list               = RTmalloc ( sizeof (scc_size_list_t) );
+    uf->list->scc_size     = 1;
+    uf->list->count        = 0;
+    uf->list->next         = NULL;
+
     return uf;
 }
 
@@ -93,7 +167,7 @@ uf_is_in_list (const uf_t *uf, ref_t state)
  *   we try to update a -> c (and thereby reducing the size of the cyclic list)
  */
 pick_e
-uf_pick_from_list (const uf_t *uf, ref_t state, ref_t *ret)
+uf_pick_from_list (uf_t *uf, ref_t state, ref_t *ret)
 {
     // invariant: every consecutive non-LOCK state is in the same set
     ref_t               a, b, c;
@@ -285,7 +359,7 @@ uf_sameset (const uf_t *uf, ref_t a, ref_t b)
  * unites two sets and ensures that their cyclic lists are combined to one list
  */
 bool
-uf_union (const uf_t *uf, ref_t a, ref_t b)
+uf_union (uf_t *uf, ref_t a, ref_t b)
 {
     if (a == b) return 1;
     
@@ -348,16 +422,15 @@ uf_union (const uf_t *uf, ref_t a, ref_t b)
 
 
     // only update acceptance set for r if q adds acceptance marks
-    r_a = atomic_read (&uf->array[r].acc_set);
-    q_a = atomic_read (&uf->array[q].acc_set);
-    if ( (q_a | r_a) != r_a) {
-        // update!
-        fetch_or (&uf->array[r].acc_set, q_a);
-        while (atomic_read (&uf->array[r].parent) != 0) {
-            r = uf_find (uf, r);
-            fetch_or (&uf->array[r].acc_set, q_a);
-        }
-    }
+    r_a = atomic_read (&uf->array[r].num_states);
+    q_a = atomic_read (&uf->array[q].num_states);
+
+    if (r_a == 0) r_a = 1;
+    if (q_a == 0) q_a = 1;
+
+    uint32_t new_num = r_a + q_a;
+
+    atomic_write (&uf->array[r].num_states, new_num);
 
     // only update worker set for r if q adds workers
     q_w = atomic_read (&uf->array[q].p_set);
@@ -398,7 +471,7 @@ uf_is_dead (const uf_t *uf, ref_t state)
  * set the UF status for the representative of state to DEAD
  */
 bool
-uf_mark_dead (const uf_t *uf, ref_t state)
+uf_mark_dead (uf_t *uf, ref_t state)
 {
     bool                result = false;
     ref_t               f      = uf_find (uf, state);
@@ -409,6 +482,13 @@ uf_mark_dead (const uf_t *uf, ref_t state)
             result = cas (&uf->array[f].uf_status, UF_LIVE, UF_DEAD);
         status = atomic_read (&uf->array[f].uf_status);
     }
+
+    uint32_t num_states = atomic_read (&uf->array[f].num_states);
+    if (num_states == 0) num_states = 1;
+
+    // add dead SCC to list of SCCs
+    add_scc_list(uf, num_states); 
+
 
     HREassert (atomic_read (&uf->array[f].parent) == 0,
                "the parent of a DEAD representative should not change");
@@ -456,7 +536,7 @@ uf_try_grab (const uf_t *uf, ref_t a)
 }
 
 static bool
-uf_lock_list (const uf_t *uf, ref_t a, ref_t *a_l)
+uf_lock_list (uf_t *uf, ref_t a, ref_t *a_l)
 {
     char pick;
 
@@ -484,8 +564,8 @@ uf_unlock_list (const uf_t *uf, ref_t a_l)
 uint32_t
 uf_get_acc (const uf_t *uf, ref_t state)
 {
-    ref_t r = uf_find (uf, state);
-    return  atomic_read (&uf->array[r].acc_set);
+    return  0;
+    (void) uf; (void) state;
 }
 
 /**
@@ -495,23 +575,8 @@ uf_get_acc (const uf_t *uf, ref_t state)
 uint32_t
 uf_add_acc (const uf_t *uf, ref_t state, uint32_t acc)
 {
-    // just return the acceptance set if nothing is added
-    if (acc == 0)
-        return uf_get_acc (uf, state);
-
-    ref_t    r     = uf_find (uf, state);
-    uint32_t r_acc = atomic_read (&uf->array[r].acc_set);
-
-    // only unite if it updates the acceptance set
-    if ( (r_acc | acc) != r_acc) {
-        // update!
-        r_acc = or_fetch (&uf->array[r].acc_set, acc);
-        while (atomic_read (&uf->array[r].parent) != 0) {
-            r = uf_find (uf, r);
-            r_acc = or_fetch (&uf->array[r].acc_set, acc);
-        }
-    }
-    return r_acc;
+    return 0;
+    (void) uf; (void) state; (void) acc;
 }
 
 

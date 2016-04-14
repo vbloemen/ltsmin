@@ -15,8 +15,8 @@
 
 #include <pins2lts-mc/algorithm/algorithm.h>
 
-typedef struct uf_s        uf_t;
-typedef struct uf_state_s  uf_state_t;
+typedef struct uf_s             uf_t;
+typedef struct uf_state_s       uf_state_t;
 
 typedef enum pick_result {
     PICK_DEAD         = 1,
@@ -29,13 +29,16 @@ typedef enum pick_result {
 #define CLAIM_SUCCESS   3
 #define CLAIM_FOUND     4
 
+
+void             print_scc_list (const uf_t *uf);
+
 extern uf_t     *uf_create ();
 
 /* **************************** list operations **************************** */
 
 extern bool      uf_is_in_list (const uf_t *uf, ref_t state);
 
-extern pick_e    uf_pick_from_list (const uf_t *uf, ref_t state, ref_t *ret);
+extern pick_e    uf_pick_from_list (uf_t *uf, ref_t state, ref_t *ret);
 
 extern bool      uf_remove_from_list (const uf_t *uf, ref_t state);
 
@@ -50,13 +53,13 @@ extern ref_t     uf_find (const uf_t *uf, ref_t state);
 
 extern bool      uf_sameset (const uf_t *uf, ref_t a, ref_t b);
 
-extern bool      uf_union (const uf_t *uf, ref_t a, ref_t b);
+extern bool      uf_union (uf_t *uf, ref_t a, ref_t b);
 
 /* ******************************* dead SCC ******************************** */
 
 extern bool      uf_is_dead (const uf_t *uf, ref_t state);
 
-extern bool      uf_mark_dead (const uf_t *uf, ref_t state);
+extern bool      uf_mark_dead (uf_t *uf, ref_t state);
 
 // permanently locks a UF node, regardless of previous value
 bool             uf_try_grab (const uf_t *uf, ref_t a);

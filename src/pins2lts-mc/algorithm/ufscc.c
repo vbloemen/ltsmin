@@ -142,31 +142,14 @@ ufscc_handle (void *arg, state_info_t *successor, transition_info_t *ti,
               int seen)
 {
     wctx_t             *ctx       = (wctx_t *) arg;
-    uf_alg_shared_t    *shared    = (uf_alg_shared_t*) ctx->run->shared;
     alg_local_t        *loc       = ctx->local;
     raw_data_t          stack_loc;
-    uint32_t            acc_set   = 0;
-
-    // TGBA acceptance
-    if (ti->labels != NULL && PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA) {
-        acc_set = ti->labels[pins_get_accepting_set_edge_label_index(ctx->model)];
-    }
 
     ctx->counters->trans++;
 
     // self-loop
     if (ctx->state->ref == successor->ref) {
         loc->cnt.selfloop ++;
-        if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
-            uint32_t acc = uf_add_acc (shared->uf, successor->ref + 1, acc_set);
-            if (GBgetAcceptingSet() == acc) {
-                report_lasso (ctx, ctx->state->ref);
-            }
-        } else if (shared->ltl) { // BA
-            if (pins_state_is_accepting(ctx->model, state_info_state(ctx->state)) ) {
-                report_lasso (ctx, ctx->state->ref);
-            }
-        }
         return;
     } else if (EXPECT_FALSE(trc_output && !seen && ti != &GB_NO_TRANSITION)) {
         // use parent_ref from reachability (used in CE reconstuction)
@@ -176,13 +159,6 @@ ufscc_handle (void *arg, state_info_t *successor, transition_info_t *ti,
 
     stack_loc = dfs_stack_push (loc->search_stack, NULL);
     state_info_serialize (successor, stack_loc);
-
-    // add acceptance set to the state
-    if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA) {
-        state_info_deserialize (loc->target, stack_loc); // search_stack TOP
-        loc->target_acc = acc_set;
-        state_info_serialize (loc->target, stack_loc);
-    }
 
     (void) ti;
 }
@@ -304,12 +280,6 @@ successor (wctx_t *ctx)
 
         if (uf_sameset (shared->uf, loc->target->ref + 1, ctx->state->ref + 1)) {
             // add transition acceptance set
-            if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
-                uint32_t acc = uf_add_acc (shared->uf, ctx->state->ref + 1, loc->state_acc);
-                if (GBgetAcceptingSet() == acc) {
-                    report_lasso (ctx, ctx->state->ref);
-                }
-            }
             dfs_stack_pop (loc->search_stack);
             return; // also no chance of new accepting cycle
         }
@@ -323,37 +293,16 @@ successor (wctx_t *ctx)
         // while ( not sameset (FROM, TO) )
         //   Union (R.POP(), FROM)
         // R.PUSH (TO')
-        ref_t               accepting = DUMMY_IDX;
-        uint32_t            acc_set   = loc->state_acc;
         do {
             root_data = dfs_stack_pop (loc->roots_stack); // UF Stack POP
             state_info_deserialize (loc->root, root_data); // roots_stack TOP
 
-            if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
-                // add the acceptance set from the previous root, not the current one
-                // otherwise we could add the acceptance set for the edge
-                // betweem two SCCs (which cannot be part of a cycle)
-                uf_add_acc (shared->uf, loc->root->ref + 1, acc_set);
-                acc_set = loc->root_acc;
-            } else if (shared->ltl && pins_state_is_accepting(ctx->model, state_info_state(loc->root))) {
-                accepting = loc->root->ref;
-            }
             Debug ("Uniting: %zu and %zu", loc->root->ref, loc->target->ref);
 
             uf_union (shared->uf, loc->root->ref + 1, loc->target->ref + 1);
 
         } while ( !uf_sameset (shared->uf, loc->target->ref + 1, ctx->state->ref + 1) );
         dfs_stack_push (loc->roots_stack, root_data);
-
-        // after uniting SCC, report lasso
-        if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
-            acc_set = uf_get_acc (shared->uf, ctx->state->ref + 1);
-            if (GBgetAcceptingSet() == acc_set) {
-                report_lasso (ctx, ctx->state->ref);
-            }
-        } else if (accepting != DUMMY_IDX) {
-            report_lasso (ctx, accepting);
-        }
 
         // cycle is now merged (and DFS stack is unchanged)
         dfs_stack_pop (loc->search_stack);
@@ -555,6 +504,11 @@ ufscc_print_stats   (run_t *run, wctx_t *ctx)
     Warning(info, "- claim found count:        %d", reduced->claimfound);
     Warning(info, "- claim success count:      %d", reduced->claimsuccess);
     Warning(info, "- cum. max stack depth:     %d", reduced->cum_max_stack);
+    Warning(info, " ");
+
+
+    uf_alg_shared_t    *shared     = (uf_alg_shared_t*) ctx->run->shared;
+    print_scc_list(shared->uf);
     Warning(info, " ");
 
     run_report_total (run);
