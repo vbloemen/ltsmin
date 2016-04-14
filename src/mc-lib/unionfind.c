@@ -67,12 +67,13 @@ static void      uf_unlock_list (const uf_t *uf, ref_t a_l);
 void
 print_scc_list (const uf_t *uf)
 {
-    Warning(info, "printing SCC list:");
+    printf("Printing SCC list: ");
     scc_size_list_t *node = uf->list;
     while (node != NULL) {
-        Warning(info, "SCC size: %d, count: %d", node->scc_size, node->count);
+        printf("%d:%d-", node->scc_size, node->count);
         node = node->next;
     }
+    printf("\n");
 }
 
 
