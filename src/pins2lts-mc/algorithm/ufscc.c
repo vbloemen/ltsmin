@@ -39,6 +39,7 @@ typedef struct counter_s {
     uint32_t            claimfound;
     uint32_t            claimsuccess;
     uint32_t            cum_max_stack;
+    uint32_t            ignoring;
 } counter_t;
 
 /**
@@ -124,7 +125,7 @@ ufscc_local_init (run_t *run, wctx_t *ctx)
 
     ctx->local->fset = NULL;
     if (PINS_POR && proviso == Proviso_CNDFS) {
-        ctx->local->fset = fset_create (sizeof(ref_t), 0, 4, 24);
+        ctx->local->fset = fset_create (sizeof(ref_t), sizeof(size_t), 4, 24);
     }
 
     ctx->local->cnt.scc_count               = 0;
@@ -135,6 +136,7 @@ ufscc_local_init (run_t *run, wctx_t *ctx)
     ctx->local->cnt.claimfound              = 0;
     ctx->local->cnt.claimsuccess            = 0;
     ctx->local->cnt.cum_max_stack           = 0;
+    ctx->local->cnt.ignoring                = 0;
 
     shared->ltl = pins_get_accepting_state_label_index(ctx->model) != -1;
 
@@ -192,30 +194,34 @@ ufscc_handle (void *arg, state_info_t *successor, transition_info_t *ti,
                 report_lasso (ctx, ctx->state->ref);
             }
         }
-        return;
-    } else if (EXPECT_FALSE(trc_output && !seen && ti != &GB_NO_TRANSITION)) {
-        // use parent_ref from reachability (used in CE reconstuction)
-        ref_t *succ_parent = get_parent_ref(loc->rctx, successor->ref);
-        atomic_write (succ_parent, ctx->state->ref);
-    }
 
-    stack_loc = dfs_stack_push (loc->search_stack, NULL);
-    state_info_serialize (successor, stack_loc);
+    } else {
 
-    // add acceptance set to the state
-    if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA) {
-        state_info_deserialize (loc->target, stack_loc); // search_stack TOP
-        loc->target_acc = acc_set;
-        state_info_serialize (loc->target, stack_loc);
+        if (EXPECT_FALSE(trc_output && !seen && ti != &GB_NO_TRANSITION)) {
+            // use parent_ref from reachability (used in CE reconstuction)
+            ref_t *succ_parent = get_parent_ref(loc->rctx, successor->ref);
+            atomic_write (succ_parent, ctx->state->ref);
+        }
+
+        stack_loc = dfs_stack_push (loc->search_stack, NULL);
+        state_info_serialize (successor, stack_loc);
+
+        // add acceptance set to the state
+        if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA) {
+            state_info_deserialize (loc->target, stack_loc); // search_stack TOP
+            loc->target_acc = acc_set;
+            state_info_serialize (loc->target, stack_loc);
+        }
     }
 
     // check proviso
+    size_t *num;
     if (PINS_POR && proviso == Proviso_CNDFS && loc->state_prov == UNKNOWN) {
         if (ti->por_proviso != 0) { // state already fully expanded
             loc->state_prov = INVIOLABLE;
             state_store_try_set_counters (successor->ref, 2, UNKNOWN, INVIOLABLE);
         } else if ((ctx->state->ref == successor->ref ||
-                   fset_find(loc->fset, NULL, &successor->ref, NULL, false))) {
+                   fset_find(loc->fset, NULL, &successor->ref, (void**)&num, false))) {
             loc->state_prov = LOCAL_CYCLE; // found cycle
         }
         // avoid full exploration (proviso is enforced later in backtrack)
@@ -223,6 +229,24 @@ ufscc_handle (void *arg, state_info_t *successor, transition_info_t *ti,
     }
 
     (void) ti;
+}
+
+static int
+reach_explore_all (wctx_t *ctx)
+{
+    int                 succs;
+    alg_local_t        *loc = ctx->local;
+
+    permute_set_por (ctx->permute, 0);
+
+    HREassert (state_store_get_wip(ctx->state->ref) == INVIOLABLE);
+    dfs_stack_enter (loc->search_stack);
+    increase_level (ctx->counters);
+    Debug ("Exploring (FULLY) %zu", ctx->state->ref);
+    succs = permute_trans (ctx->permute, ctx->state, ufscc_handle, ctx);
+
+    permute_set_por (ctx->permute, 1);
+    return succs;
 }
 
 /**
@@ -241,47 +265,42 @@ explore_state (wctx_t *ctx)
     stack_loc = dfs_stack_push (loc->roots_stack, NULL);
     loc->root_acc = loc->state_acc;
     state_info_serialize (loc->root, stack_loc);
+    ctx->counters->explored ++;
+
+    if (PINS_POR && proviso == Proviso_CNDFS) {
+        size_t *num;
+        int found = fset_find (loc->fset, NULL, &ctx->state->ref, (void **)&num, true);
+        HREassert (found != FSET_FULL, "Table full? (%d)", found);
+        if (found) {
+            (*num)++;
+        } else {
+            *num = 1;
+        }
+        loc->state_prov = state_store_get_wip (ctx->state->ref);
+        if (loc->state_prov == INVIOLABLE) {
+            state_info_update (ctx->state);
+            return reach_explore_all (ctx);
+        }
+    }
 
     increase_level (ctx->counters);
     dfs_stack_enter (loc->search_stack);
-    if (PINS_POR && proviso == Proviso_CNDFS) {
-        int res = fset_find (loc->fset, NULL, &ctx->state->ref, NULL, true);
-        HREassert (!res, "Table full? (%d)", res); // not found
-    }
-
-    loc->state_prov = state_store_get_wip (ctx->state->ref);
     Debug ("Exploring %zu", ctx->state->ref);
     trans = permute_trans (ctx->permute, ctx->state, ufscc_handle, ctx);
+
     if (PINS_POR && proviso == Proviso_CNDFS) {
         state_info_update (ctx->state);
     }
 
-    ctx->counters->explored ++;
     run_maybe_report1 (ctx->run, ctx->counters, "");
 
     return trans;
-}
-
-static void
-reach_explore_all (wctx_t *ctx, state_info_t *state)
-{
-    alg_local_t        *loc = ctx->local;
-
-    permute_set_por (ctx->permute, 0);
-
-    dfs_stack_enter (loc->search_stack);
-    increase_level (ctx->counters);
-    permute_trans (ctx->permute, state, ufscc_handle, ctx);
-
-    permute_set_por (ctx->permute, 1);
 }
 
 static bool
 check_cndfs_proviso (wctx_t *ctx)
 {
     alg_local_t        *loc = ctx->local;
-
-    if (PINS_POR == 0 || proviso != Proviso_CNDFS) return false;
 
     // Only check proviso if the state is violable. It may be that
     // the reduced successor set is already inviolable,
@@ -290,6 +309,7 @@ check_cndfs_proviso (wctx_t *ctx)
         return false;
     }
 
+    par_cycle_proviso_t old = loc->state_prov;
     switch (loc->state_prov) {
     case UNKNOWN:       loc->state_prov = VIOLABLE;     break;
     case LOCAL_CYCLE:   loc->state_prov = INVIOLABLE;   break;
@@ -299,11 +319,16 @@ check_cndfs_proviso (wctx_t *ctx)
     }
 
     int success = state_store_try_set_counters (ctx->state->ref, 2, UNKNOWN, loc->state_prov);
+    //HREassert (!(success && state_store_get_wip(ctx->state->ref) != loc->state_prov));
     if (( success && loc->state_prov == INVIOLABLE) ||
         (!success && state_store_get_wip(ctx->state->ref) == INVIOLABLE)) {
         loc->state_prov = INVIOLABLE;
+        loc->cnt.ignoring += success != 0;
         state_info_update (ctx->state);
         return true;
+    }
+    if (old != loc->state_prov) {
+        state_info_update (ctx->state);
     }
     return false;
 }
@@ -420,6 +445,7 @@ successor (wctx_t *ctx)
         uint32_t            acc_set   = loc->state_acc;
         do {
             root_data = dfs_stack_pop (loc->roots_stack); // UF Stack POP
+            HREassert (root_data != NULL, "Unexpected empty root stack.");
             state_info_deserialize (loc->root, root_data); // roots_stack TOP
 
             if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
@@ -454,6 +480,12 @@ successor (wctx_t *ctx)
     }
 }
 
+static char *
+prov_name (par_cycle_proviso_t p)
+{
+    return  p == UNKNOWN ? "?" :
+           (p == VIOLABLE ? "-" : "+");
+}
 /**
  * there are no states on the current stackframe. We leave the stackframe and
  * check if the previous state (parent) is part of the same SCC. If this is not
@@ -483,18 +515,32 @@ backtrack (wctx_t *ctx)
     state_data = dfs_stack_top (loc->search_stack);
     state_info_deserialize (ctx->state, state_data);
 
-    if (check_cndfs_proviso(ctx)) {
-        reach_explore_all (ctx, ctx->state);
-        return false;
+    par_cycle_proviso_t old = loc->state_prov;
+    if (PINS_POR && proviso == Proviso_CNDFS) {
+        if (check_cndfs_proviso(ctx)) {
+            reach_explore_all (ctx);
+            return false;
+        } else {
+            par_cycle_proviso_t p = state_store_get_wip (ctx->state->ref);
+            HREassert ((p == UNKNOWN && old == INVIOLABLE) ||
+                       (p == VIOLABLE && old != INVIOLABLE) ||
+                       (p == INVIOLABLE && old == p),
+                       "store = %s, stack = %s (old = %s)",
+                       prov_name(p), prov_name(loc->state_prov), prov_name(old));
+        }
+
+        size_t *num;
+        fset_find (loc->fset, NULL, &ctx->state->ref, (void **)&num, false);
+        (*num)--;
+        if (*num == 0) {
+            int res = fset_delete (loc->fset, NULL, &ctx->state->ref);
+            HREassert (res); // success
+        }
     }
 
     // remove the fully explored state from the search_stack
     dfs_stack_pop (loc->search_stack);
     Debug ("Backtracking %zu", ctx->state->ref);
-    if (PINS_POR && proviso == Proviso_CNDFS) {
-        int res = fset_delete (loc->fset, NULL, &ctx->state->ref);
-        HREassert (res); // success
-    }
 
     // remove ctx->state from the list
     // (no other workers have to explore this state anymore)
@@ -518,6 +564,7 @@ backtrack (wctx_t *ctx)
     // ctx->state is the last KNOWN state in its SCC (according to this worker)
     // ==> check if we can find another one with pick_from_list
     pick = uf_pick_from_list (shared->uf, ctx->state->ref + 1, &state_picked);
+    state_picked = state_picked - 1; // ggggrrrrr
 
     if (pick != PICK_SUCCESS) {
         // list is empty ==> SCC is completely explored
@@ -552,7 +599,7 @@ backtrack (wctx_t *ctx)
     } else {
 
         // Found w in List(v) ==> push w on stack and search its successors
-        state_info_set (ctx->state, state_picked - 1, LM_NULL_LATTICE);
+        state_info_set (ctx->state, state_picked, LM_NULL_LATTICE);
         state_data = dfs_stack_push (loc->search_stack, NULL);
         loc->state_acc = 0; // the acceptance marks should already be stored in the SCC
         state_info_serialize (ctx->state, state_data);
@@ -598,9 +645,7 @@ ufscc_run  (run_t *run, wctx_t *ctx)
             if (0 == dfs_stack_nframes (loc->search_stack))
                 break;
 
-            success = backtrack (ctx);
-
-            if (!success) continue; // state requires continued exploration
+            backtrack (ctx);
         }
     }
 
@@ -616,7 +661,7 @@ ufscc_run  (run_t *run, wctx_t *ctx)
     }
 
     if (PINS_POR && proviso == Proviso_CNDFS && !run_is_stopped(ctx->run)) {
-        HREassert (fset_count(loc->fset) == 0);
+        HREassert (fset_count(loc->fset) == 0, "Actual count: %zu", fset_count(loc->fset));
     }
 
     (void) run;
@@ -640,6 +685,7 @@ ufscc_reduce (run_t *run, wctx_t *ctx)
     reduced->claimfound             += cnt->claimfound;
     reduced->claimsuccess           += cnt->claimsuccess;
     reduced->cum_max_stack          += ctx->counters->level_max;
+    reduced->ignoring               += cnt->ignoring;
 }
 
 
@@ -668,6 +714,9 @@ ufscc_print_stats   (run_t *run, wctx_t *ctx)
     Warning(info, "- claim found count:        %d", reduced->claimfound);
     Warning(info, "- claim success count:      %d", reduced->claimsuccess);
     Warning(info, "- cum. max stack depth:     %d", reduced->cum_max_stack);
+if (PINS_POR && proviso == Proviso_CNDFS) {
+    Warning(info, "- ignoring states:          %d", reduced->ignoring);
+}
     Warning(info, " ");
 
     run_report_total (run);
