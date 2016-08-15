@@ -148,6 +148,9 @@ alg_shared_init_strategy      (run_t *run, strategy_t strat)
     case Strat_UFSCC:
         ufscc_shared_init (run);
         break;
+    case Strat_PRINTDOT:
+        printdot_shared_init (run);
+        break;
     case Strat_RENAULT:
         renault_shared_init (run);
         break;

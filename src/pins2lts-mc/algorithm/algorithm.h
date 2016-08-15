@@ -98,6 +98,7 @@ extern void owcty_shared_init       (run_t *run);
 extern void dfs_fifo_shared_init    (run_t *run);
 extern void tarjan_shared_init      (run_t *run);
 extern void ufscc_shared_init       (run_t *run);
+extern void printdot_shared_init    (run_t *run);
 extern void renault_shared_init     (run_t *run);
 
 /**

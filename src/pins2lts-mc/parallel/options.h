@@ -37,6 +37,7 @@ typedef enum {
     Strat_TARJAN = 8192,
     Strat_UFSCC  = 16384,
     Strat_RENAULT= 32768,
+    Strat_PRINTDOT= 65536,
     Strat_TA_SBFS= Strat_SBFS | Strat_TA,
     Strat_TA_BFS = Strat_BFS | Strat_TA,
     Strat_TA_DFS = Strat_DFS | Strat_TA,
