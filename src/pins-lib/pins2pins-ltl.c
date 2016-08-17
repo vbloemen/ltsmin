@@ -288,6 +288,8 @@ void ltl_spin_cb (void *context, transition_info_t *ti, int *dst, int *cpy) {
                 ti->labels[ctx->el_idx_accept_set] =
                                 ctx->ba->states[i]->transitions[j].acc_set;
             }
+            printf("LABEL %d ", ti->labels[0]); // hardcoded
+            printf("BUCHI %d ", dst_buchi[ctx->ltl_idx]);
 
             // callback, emit new state, move allowed
             infoctx->cb (infoctx->user_context, ti, dst_buchi,cpy);

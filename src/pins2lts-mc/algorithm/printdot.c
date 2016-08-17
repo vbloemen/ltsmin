@@ -16,6 +16,8 @@
 #include <pins2lts-mc/parallel/worker.h>
 #include <util-lib/fast_set.h>
 
+#include <ltsmin-lib/etf-util.h>
+
 
 // maximum number of nodes allowed in the DOT
 #define MAX_NODES 100
@@ -25,8 +27,11 @@
  * local info
  */
 struct alg_local_s {
+    ref_t   from_arr[MAX_NODES];
     ref_t   to_arr[MAX_NODES];
+    ref_t   visited[MAX_NODES];
     int     max_index;
+    int     max_visit;
 };
 
 
@@ -49,6 +54,7 @@ printdot_local_init (run_t *run, wctx_t *ctx)
 {
     ctx->local = RTmallocZero (sizeof (alg_local_t) );
     ctx->local->max_index = 0;
+    ctx->local->max_visit = 0;
     (void) run; 
 }
 
@@ -61,6 +67,16 @@ printdot_local_deinit   (run_t *run, wctx_t *ctx)
     (void) run;
 }
 
+int
+have_visited(wctx_t *ctx, ref_t node) 
+{
+    alg_local_t        *loc       = ctx->local;
+    for (int i=0; i<loc->max_visit; i++) {
+        if (node == loc->visited[i])
+            return 1;
+    }
+    return 0;
+}
 
 static void
 printdot_handle (void *arg, state_info_t *successor, transition_info_t *ti,
@@ -70,25 +86,12 @@ printdot_handle (void *arg, state_info_t *successor, transition_info_t *ti,
     alg_local_t        *loc       = ctx->local;
     uint32_t            acc_set   = 0;
 
-    printf("  HANDLE: %zu -> %zu\n", ctx->state->ref, successor->ref);
-
-    // TGBA acceptance
-    if (ti->labels != NULL && PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA) {
-        acc_set = ti->labels[pins_get_accepting_set_edge_label_index(ctx->model)];
-        if (acc_set != 0) {
-            printf("    acceptance set = %d\n", acc_set);
-        }
-    }
-
-    // print more detailed info :)
-
+    printf("EDGE %zu %zu\n", ctx->state->ref, successor->ref);
 
     if (loc->max_index < MAX_NODES) {
+        loc->from_arr[loc->max_index] = ctx->state->ref; 
         loc->to_arr[loc->max_index]   = successor->ref; 
         loc->max_index ++;
-    }
-    else{
-        printf("    ignoring transition, reached maximum!\n");
     }
 
     (void) ti; (void) seen;
@@ -98,11 +101,12 @@ printdot_handle (void *arg, state_info_t *successor, transition_info_t *ti,
 static inline size_t
 explore_state (wctx_t *ctx)
 {
-    printf("\nEXPLORE: %zu\n", ctx->state->ref);
+    alg_local_t        *loc       = ctx->local;
+
+    loc->visited[loc->max_visit++] = ctx->state->ref;
 
     permute_trans (ctx->permute, ctx->state, printdot_handle, ctx);
 
-    printf("\nDONE EXPLORING: %zu\n", ctx->state->ref);
 }
 
 
@@ -110,8 +114,6 @@ static void
 printdot_init  (wctx_t *ctx)
 {
     transition_info_t   ti     = GB_NO_TRANSITION;
-
-    printf("INIT\n");
 
     // handle the initial state
     ctx->state->ref = ctx->initial->ref;
@@ -129,15 +131,32 @@ printdot_run  (run_t *run, wctx_t *ctx)
         printf("\n\nSTART\n");
         printdot_init (ctx);
 
-        for (int i=0; i<10; i++) {
+        for (int i=0; i<100; i++) {
             if (i > loc->max_index) {
-                printf("no more nodes left! :(\n");
                 break;
             }
 
-            state_info_set (ctx->state, loc->to_arr[i], LM_NULL_LATTICE);
-            explore_state (ctx);
+            if (!have_visited(ctx,loc->to_arr[i])) {
+                state_info_set (ctx->state, loc->to_arr[i], LM_NULL_LATTICE);
+                explore_state (ctx);
+            }
         }
+
+        /*// print transitions and acceptance
+        printf("###\n");
+        printf("---  INIT -> %zu\n", loc->to_arr[0]);
+        for (int i=1; i<loc->max_index; i++) {
+
+            state_info_set (ctx->state, loc->from_arr[i], LM_NULL_LATTICE);
+            int acc1 = pins_state_is_accepting(ctx->model, state_info_state(ctx->state));
+
+            state_info_set (ctx->state, loc->to_arr[i], LM_NULL_LATTICE);
+            int acc2 = pins_state_is_accepting(ctx->model, state_info_state(ctx->state));
+
+            printf("--- %zu (%d) -> %zu (%d)\n", loc->from_arr[i], acc1, loc->to_arr[i], acc2);
+        }
+        printf("###\n");*/
+
 
     }
 
