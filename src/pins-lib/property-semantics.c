@@ -117,22 +117,8 @@ eval_predicate(model_t model, ltsmin_expr_t e, int *state, ltsmin_parse_env_t en
                 return GBgetStateLabelLong(model, e->idx - N, state);
             }
         case PRED_EVAR: {
-            // test whether the state has at least one transition (existential) with a specific edge
-            struct evar_info ctx;
-            ctx.idx = e->idx;
-            ctx.num = e->chunk_cache;
-            ctx.exists = 0;
-
-            int* groups = NULL;
-            const int n = GBgroupsOfEdge(model, e->idx, ctx.num, &groups);
-
-            if (n > 0) {
-                for (int i = 0; i < n && ctx.exists == 0; i++) {
-                    GBgetTransitionsLong(model, groups[i], state, evar_cb, &ctx);
-                }
-                RTfree(groups);
-                return ctx.exists ? ctx.num : -1;
-            } else return -1;
+            // we don't do edge var checking here
+            return -1;
         }
         case PRED_CHUNK: {
             return e->chunk_cache;
@@ -218,5 +204,33 @@ eval_predicate(model_t model, ltsmin_expr_t e, int *state, ltsmin_parse_env_t en
             LTSminLogExpr (error, "Unhandled predicate expression: ", e, env);
             HREabort (LTSMIN_EXIT_FAILURE);
     }
+    return 0;
+}
+
+
+long
+eval_predicate_edge(model_t model, ltsmin_expr_t e, int action_label, ltsmin_parse_env_t env)
+{
+    switch (e->token) {
+        case PRED_TRUE:
+            return 1;
+        case PRED_FALSE:
+            return 0;
+        case PRED_NUM:
+            return e->idx;
+        case PRED_EVAR: {
+            return action_label;
+        }
+        case PRED_CHUNK: {
+            return e->chunk_cache;
+        }
+        case PRED_EQ:
+            return eval_predicate_edge(model, e->arg1, action_label, env) ==
+                    eval_predicate_edge(model, e->arg2, action_label, env);
+        default:
+            LTSminLogExpr (error, "Unhandled predicate expression: ", e, env);
+            HREabort (LTSMIN_EXIT_FAILURE);
+    }
+
     return 0;
 }

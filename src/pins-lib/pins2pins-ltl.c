@@ -175,14 +175,39 @@ ltl_sl_all(model_t model, int *state, int *labels)
     }
 }
 
+static inline bool
+is_action_label (ltl_context_t *ctx, int predicate_index)
+{
+    // TODO: check in buchi automata if the predicate is a state or edge var
+    (void) predicate_index; (void) ctx;
+
+    return true;
+}
+
 static inline int
 eval (cb_context *infoctx, int *state)
 {
     ltl_context_t *ctx = infoctx->ctx;
     int pred_evals = 0; // assume < 32 predicates..
     for(int i=0; i < ctx->ba->predicate_count; i++) {
-        if (eval_predicate(GBgetParent(infoctx->model), ctx->ba->predicates[i], state, ctx->ba->env))
-            pred_evals |= (1 << i);
+        if ( !is_action_label(ctx, i) ) {
+            if (eval_predicate(GBgetParent(infoctx->model), ctx->ba->predicates[i], state, ctx->ba->env))
+                pred_evals |= (1 << i);
+        }
+    }
+    return pred_evals;
+}
+
+static inline int
+eval_edge (cb_context *infoctx, int action_label)
+{
+    ltl_context_t *ctx = infoctx->ctx;
+    int pred_evals = 0; // assume < 32 predicates..
+    for(int i=0; i < ctx->ba->predicate_count; i++) {
+        if ( is_action_label(ctx, i) ) {
+            if (eval_predicate_edge(GBgetParent(infoctx->model), ctx->ba->predicates[i], action_label, ctx->ba->env))
+                pred_evals |= (1 << i);
+        }
     }
     return pred_evals;
 }
@@ -201,6 +226,14 @@ void ltl_ltsmin_cb (void *context, transition_info_t *ti, int *dst, int *cpy) {
     int pred_evals = infoctx->predicate_evals;
     if (pred_evals == -1) // long calls cannot do before-hand evaluation
         eval (infoctx, infoctx->src + 1); /* ltsmin: src instead of dst */
+
+    // obtain the edge predicates
+    lts_type_t ltstype = GBgetLTStype (infoctx->model);
+    int action_labels = lts_type_find_edge_label_prefix (ltstype, LTSMIN_EDGE_TYPE_ACTION_PREFIX);
+    int edge_evals = eval_edge (infoctx, ti->labels[action_labels]);
+    // combine the state and edge predicates
+    pred_evals = pred_evals | edge_evals;
+
     int i = infoctx->src[ctx->ltl_idx];
     HREassert (i < ctx->ba->state_count);
     if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA) {
@@ -269,6 +302,14 @@ void ltl_spin_cb (void *context, transition_info_t *ti, int *dst, int *cpy) {
     int dst_buchi[ctx->len];
     memcpy (dst_buchi + 1, dst, ctx->old_len * sizeof(int) );
     int pred_evals = infoctx->predicate_evals;
+
+    // obtain the edge predicates
+    lts_type_t ltstype = GBgetLTStype (infoctx->model);
+    int action_labels = lts_type_find_edge_label_prefix (ltstype, LTSMIN_EDGE_TYPE_ACTION_PREFIX);
+    int edge_evals = eval_edge (infoctx, ti->labels[action_labels]);
+    // combine the state and edge predicates
+    pred_evals = pred_evals | edge_evals;
+
     int i = infoctx->src[ctx->ltl_idx];
     HREassert (i < ctx->ba->state_count);
     if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA) {
@@ -280,6 +321,7 @@ void ltl_spin_cb (void *context, transition_info_t *ti, int *dst, int *cpy) {
         // check predicates
         if ((pred_evals & ctx->ba->states[i]->transitions[j].pos[0]) == ctx->ba->states[i]->transitions[j].pos[0] &&
             (pred_evals & ctx->ba->states[i]->transitions[j].neg[0]) == 0) {
+
             // perform transition
             dst_buchi[ctx->ltl_idx] = ctx->ba->states[i]->transitions[j].to_state;
 
@@ -288,7 +330,9 @@ void ltl_spin_cb (void *context, transition_info_t *ti, int *dst, int *cpy) {
                 ti->labels[ctx->el_idx_accept_set] =
                                 ctx->ba->states[i]->transitions[j].acc_set;
             }
-            printf("LABEL %d ", ti->labels[0]); // hardcoded
+
+            // printdot info
+            printf("LABEL %d ", ti->labels[action_labels]); // hardcoded
             printf("BUCHI %d ", dst_buchi[ctx->ltl_idx]);
 
             // callback, emit new state, move allowed
@@ -369,6 +413,14 @@ void ltl_textbook_cb (void *c, transition_info_t *ti, int *dst, int *cpy) {
     int dst_buchi[ctx->len];
     memcpy (dst_buchi + 1, dst, ctx->old_len * sizeof(int) );
     int dst_pred = eval (infoctx, dst);
+
+    // obtain the edge predicates
+    lts_type_t ltstype = GBgetLTStype (infoctx->model);
+    int action_labels = lts_type_find_edge_label_prefix (ltstype, LTSMIN_EDGE_TYPE_ACTION_PREFIX);
+    int edge_evals = eval_edge (infoctx, ti->labels[action_labels]);
+    // combine the state and edge predicates
+    dst_pred = dst_pred | edge_evals;
+
     int i = infoctx->src[ctx->ltl_idx];
     if (i == -1) { i=0; } /* textbook: extra initial state */
     HREassert (i < ctx->ba->state_count );

@@ -94,6 +94,11 @@ printdot_handle (void *arg, state_info_t *successor, transition_info_t *ti,
         loc->max_index ++;
     }
 
+    //if (pins_state_is_accepting(ctx->model, state_info_state(successor))) {
+    //    Warning(info, "state %zu is ACCEPTING!", successor->ref);
+    //}
+
+
     (void) ti; (void) seen;
 }
 
