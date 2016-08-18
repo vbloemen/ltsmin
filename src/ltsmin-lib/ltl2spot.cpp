@@ -25,9 +25,10 @@ extern "C" {
 #include <hre/user.h>
 #include <ltsmin-lib/ltl2spot.h>
 #include <ltsmin-lib/ltl2ba-lex-helper.h>
+#include <ltsmin-lib/ltsmin-buchi.h>
+#include <ltsmin-lib/ltsmin-standard.h>
 #include <ltsmin-lib/ltsmin-syntax.h>
 #include <ltsmin-lib/ltsmin-tl.h>
-#include <ltsmin-lib/ltsmin-buchi.h>
 
 #define LTL_LPAR ((void*)0x01)
 #define LTL_RPAR ((void*)0x02)
@@ -57,6 +58,7 @@ ltl_to_store_helper (char *at, ltsmin_lin_expr_t *le, ltsmin_parse_env_t env, in
       case LTL_NEXT:      n += snprintf(at + (at?n:0), max_buffer, " X "); break;
       case LTL_EQUIV:     n += snprintf(at + (at?n:0), max_buffer, " <-> "); break;
       case LTL_IMPLY:     n += snprintf(at + (at?n:0), max_buffer, " -> "); break;
+      case LTL_EN:
       case LTL_EQ:{
         char *buffer = LTSminPrintExpr(le->lin_expr[i], env);
         // store the predicate (only once)
@@ -111,7 +113,7 @@ ltl_to_store (ltsmin_expr_t e, ltsmin_parse_env_t env)
 
 
 int
-check_edgevar(ltsmin_expr_t e)
+check_edgevar(ltsmin_expr_t e, ltsmin_parse_env_t env)
 {
     switch (e->token) {
         case PRED_TRUE:
@@ -126,8 +128,9 @@ check_edgevar(ltsmin_expr_t e)
             return e->chunk_cache;
         }
         case PRED_NOT:
-            return check_edgevar(e->arg1);
+            return check_edgevar(e->arg1, env);
         case PRED_EQ:
+        case PRED_EN:
         case PRED_NEQ:
         case PRED_AND:
         case PRED_OR:
@@ -142,10 +145,11 @@ check_edgevar(ltsmin_expr_t e)
         case PRED_REM: 
         case PRED_ADD: 
         case PRED_SUB: {
-            return (check_edgevar(e->arg1) != -1) ? check_edgevar(e->arg1) : check_edgevar(e->arg2);
+            return (check_edgevar(e->arg1, env) != -1) ? check_edgevar(e->arg1, env) : check_edgevar(e->arg2, env);
         }
         default:
-            return -1;
+            LTSminLogExpr (error, "Unhandled LTL expression: ", e, env);
+            HREabort(LTSMIN_EXIT_FAILURE);
     }
     return -1;
 }
@@ -172,7 +176,7 @@ get_predicate_index(std::vector<std::string> pred_vec, std::string predicate)
 
 
 static ltsmin_buchi_t *
-create_ltsmin_buchi(spot::twa_graph_ptr& aut)
+create_ltsmin_buchi(spot::twa_graph_ptr& aut, ltsmin_parse_env_t env)
 {
   // ensure that the automaton is deterministic (apparently this is not possible)
   //HREassert(spot::is_deterministic(aut), "The automaton is not deterministic");
@@ -219,7 +223,7 @@ create_ltsmin_buchi(spot::twa_graph_ptr& aut)
     ltsmin_expr_t e = ltsmin_expr_lookup(NULL, (char*) ap_name.c_str(), &le_list);
     HREassert(e, "Empty LTL expression");
 
-    int is_edgevar = check_edgevar(e);
+    int is_edgevar = check_edgevar(e, env);
     if (is_edgevar != 0) // both 1 and -1 (-1 contains both state and edge vars)
       ba->edge_predicates |= (1ULL << i);
 
@@ -369,8 +373,8 @@ ltsmin_ltl2spot(ltsmin_expr_t e, int to_tgba, ltsmin_parse_env_t env)
 
 
 ltsmin_buchi_t *
-ltsmin_hoa_buchi() 
+ltsmin_hoa_buchi(ltsmin_parse_env_t env) 
 {
-  ltsmin_buchi_t *ret = create_ltsmin_buchi(spot_automaton);
+  ltsmin_buchi_t *ret = create_ltsmin_buchi(spot_automaton, env);
   return ret;
 }
