@@ -861,7 +861,7 @@ rel_expr_cb(vset_t set, void *context, int *e)
     int vec[N];
     memcpy(vec, ctx->vec, sizeof(int[N]));
     for (int i = 0; i < ctx->len; i++) vec[ctx->deps[i]] = e[i];
-    if (eval_predicate(model, ctx->e, vec, ctx->env)) vset_add(set, e);
+    if (eval_predicate(model, ctx->e, vec, -1, ctx->env)) vset_add(set, e);
 }
 
 #define eval_predicate_set_par(e, env, s) CALL(eval_predicate_set_par, (e), (env), (s))

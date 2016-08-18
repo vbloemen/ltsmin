@@ -20,8 +20,6 @@
 /* set visibility in PINS and dependencies in deps (if not NULL) */
 extern void set_pins_semantics(model_t model, ltsmin_expr_t e, ltsmin_parse_env_t env, bitvector_t *deps, bitvector_t *sl_deps);
 
-extern long eval_predicate(model_t model, ltsmin_expr_t e, int *state, ltsmin_parse_env_t env);
-
-extern long eval_predicate_edge(model_t model, ltsmin_expr_t e, int action_label, ltsmin_parse_env_t env);
+extern long eval_predicate(model_t model, ltsmin_expr_t e, int *state, int action_label, ltsmin_parse_env_t env);
 
 #endif // PROPERTY_SEMANTICS_H

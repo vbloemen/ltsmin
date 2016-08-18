@@ -84,22 +84,8 @@ void set_pins_semantics(model_t model, ltsmin_expr_t e, ltsmin_parse_env_t env, 
     }
 }
 
-struct evar_info {
-    int idx; // edge label to look for
-    int num; // edge value to look for
-    int exists; // whether an transition with such an edge exists
-};
-
-static void
-evar_cb(void *context, transition_info_t *ti, int *dst, int *cpy)
-{
-    (void) dst; (void) cpy;
-    struct evar_info* ctx = (struct evar_info*) context;
-    ctx->exists = ctx->exists || ti->labels[ctx->idx] == ctx->num;
-}
-
 long
-eval_predicate(model_t model, ltsmin_expr_t e, int *state, ltsmin_parse_env_t env)
+eval_predicate(model_t model, ltsmin_expr_t e, int *state, int action_label, ltsmin_parse_env_t env)
 {
     const int N = lts_type_get_state_length(GBgetLTStype(model));
 
@@ -117,47 +103,46 @@ eval_predicate(model_t model, ltsmin_expr_t e, int *state, ltsmin_parse_env_t en
                 return GBgetStateLabelLong(model, e->idx - N, state);
             }
         case PRED_EVAR: {
-            // we don't do edge var checking here
-            return -1;
+            return action_label;
         }
         case PRED_CHUNK: {
             return e->chunk_cache;
         }
         case PRED_NOT:
-            return !eval_predicate(model, e->arg1, state, env);
+            return !eval_predicate(model, e->arg1, state, action_label, env);
         case PRED_EQ:
-            return eval_predicate(model, e->arg1, state, env) ==
-                    eval_predicate(model, e->arg2, state, env);
+            return eval_predicate(model, e->arg1, state, action_label, env) ==
+                    eval_predicate(model, e->arg2, state, action_label, env);
         case PRED_NEQ:
-            return eval_predicate(model, e->arg1, state, env) !=
-                    eval_predicate(model, e->arg2, state, env);
+            return eval_predicate(model, e->arg1, state, action_label, env) !=
+                    eval_predicate(model, e->arg2, state, action_label, env);
         case PRED_AND:
-            return eval_predicate(model, e->arg1, state, env) &&
-                    eval_predicate(model, e->arg2, state, env);
+            return eval_predicate(model, e->arg1, state, action_label, env) &&
+                    eval_predicate(model, e->arg2, state, action_label, env);
         case PRED_OR:
-            return eval_predicate(model, e->arg1, state, env) ||
-                    eval_predicate(model, e->arg2, state, env);
+            return eval_predicate(model, e->arg1, state, action_label, env) ||
+                    eval_predicate(model, e->arg2, state, action_label, env);
         case PRED_IMPLY:
-            return !eval_predicate(model, e->arg1, state, env) ||
-                      eval_predicate(model, e->arg2, state, env);
+            return !eval_predicate(model, e->arg1, state, action_label, env) ||
+                      eval_predicate(model, e->arg2, state, action_label, env);
         case PRED_EQUIV:
-            return !eval_predicate(model, e->arg1, state, env) ==
-                    !eval_predicate(model, e->arg2, state, env);
+            return !eval_predicate(model, e->arg1, state, action_label, env) ==
+                    !eval_predicate(model, e->arg2, state, action_label, env);
         case PRED_LT:
-            return eval_predicate(model, e->arg1, state, env) <
-                    eval_predicate(model, e->arg2, state, env);
+            return eval_predicate(model, e->arg1, state, action_label, env) <
+                    eval_predicate(model, e->arg2, state, action_label, env);
         case PRED_LEQ:
-            return eval_predicate(model, e->arg1, state, env) <=
-                    eval_predicate(model, e->arg2, state, env);
+            return eval_predicate(model, e->arg1, state, action_label, env) <=
+                    eval_predicate(model, e->arg2, state, action_label, env);
         case PRED_GT:
-            return eval_predicate(model, e->arg1, state, env) >
-                    eval_predicate(model, e->arg2, state, env);
+            return eval_predicate(model, e->arg1, state, action_label, env) >
+                    eval_predicate(model, e->arg2, state, action_label, env);
         case PRED_GEQ:
-            return eval_predicate(model, e->arg1, state, env) >=
-                    eval_predicate(model, e->arg2, state, env);
+            return eval_predicate(model, e->arg1, state, action_label, env) >=
+                    eval_predicate(model, e->arg2, state, action_label, env);
         case PRED_MULT: {
-            const long l = eval_predicate(model, e->arg1, state, env);
-            const long r = eval_predicate(model, e->arg2, state, env);
+            const long l = eval_predicate(model, e->arg1, state, action_label, env);
+            const long r = eval_predicate(model, e->arg2, state, action_label, env);
             if (long_mult_overflow(l, r)) {
                 LTSminLogExpr (error, "integer overflow in: ", e, env);
                 HREabort(LTSMIN_EXIT_FAILURE);
@@ -165,8 +150,8 @@ eval_predicate(model_t model, ltsmin_expr_t e, int *state, ltsmin_parse_env_t en
             return l * r;
         }
         case PRED_DIV: {
-            const long l = eval_predicate(model, e->arg1, state, env);
-            const long r = eval_predicate(model, e->arg2, state, env);
+            const long l = eval_predicate(model, e->arg1, state, action_label, env);
+            const long r = eval_predicate(model, e->arg2, state, action_label, env);
             if (r == 0 || ((l == LONG_MIN) && r == -1)) {
                 LTSminLogExpr (error, "division by zero in: ", e, env);
                 HREabort(LTSMIN_EXIT_FAILURE);
@@ -174,8 +159,8 @@ eval_predicate(model_t model, ltsmin_expr_t e, int *state, ltsmin_parse_env_t en
             return l / r;
         }
         case PRED_REM: {
-            const long l = eval_predicate(model, e->arg1, state, env);
-            const long r = eval_predicate(model, e->arg2, state, env);
+            const long l = eval_predicate(model, e->arg1, state, action_label, env);
+            const long r = eval_predicate(model, e->arg2, state, action_label, env);
             if (r == 0 || ((l == LONG_MIN) && r == -1)) {
                 LTSminLogExpr (error, "division by zero in: ", e, env);
                 HREabort(LTSMIN_EXIT_FAILURE);
@@ -183,8 +168,8 @@ eval_predicate(model_t model, ltsmin_expr_t e, int *state, ltsmin_parse_env_t en
             return l % r;
         }
         case PRED_ADD: {
-            const long l = eval_predicate(model, e->arg1, state, env);
-            const long r = eval_predicate(model, e->arg2, state, env);
+            const long l = eval_predicate(model, e->arg1, state, action_label, env);
+            const long r = eval_predicate(model, e->arg2, state, action_label, env);
             if ((r > 0 && l > LONG_MAX - r) || (r < 0 && l < LONG_MIN - r)) {
                 LTSminLogExpr (error, "integer overflow in: ", e, env);
                 HREabort(LTSMIN_EXIT_FAILURE);
@@ -192,8 +177,8 @@ eval_predicate(model_t model, ltsmin_expr_t e, int *state, ltsmin_parse_env_t en
             return l + r;
         }
         case PRED_SUB: {
-            const long l = eval_predicate(model, e->arg1, state, env);
-            const long r = eval_predicate(model, e->arg2, state, env);
+            const long l = eval_predicate(model, e->arg1, state, action_label, env);
+            const long r = eval_predicate(model, e->arg2, state, action_label, env);
             if ((r > 0 && l < LONG_MIN + r) || (r < 0 && l > LONG_MAX + r)) {
                 LTSminLogExpr (error, "integer overflow in: ", e, env);
                 HREabort(LTSMIN_EXIT_FAILURE);
@@ -204,33 +189,5 @@ eval_predicate(model_t model, ltsmin_expr_t e, int *state, ltsmin_parse_env_t en
             LTSminLogExpr (error, "Unhandled predicate expression: ", e, env);
             HREabort (LTSMIN_EXIT_FAILURE);
     }
-    return 0;
-}
-
-
-long
-eval_predicate_edge(model_t model, ltsmin_expr_t e, int action_label, ltsmin_parse_env_t env)
-{
-    switch (e->token) {
-        case PRED_TRUE:
-            return 1;
-        case PRED_FALSE:
-            return 0;
-        case PRED_NUM:
-            return e->idx;
-        case PRED_EVAR: {
-            return action_label;
-        }
-        case PRED_CHUNK: {
-            return e->chunk_cache;
-        }
-        case PRED_EQ:
-            return eval_predicate_edge(model, e->arg1, action_label, env) ==
-                    eval_predicate_edge(model, e->arg2, action_label, env);
-        default:
-            LTSminLogExpr (error, "Unhandled predicate expression: ", e, env);
-            HREabort (LTSMIN_EXIT_FAILURE);
-    }
-
     return 0;
 }
