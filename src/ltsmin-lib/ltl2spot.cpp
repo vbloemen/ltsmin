@@ -109,6 +109,50 @@ ltl_to_store (ltsmin_expr_t e, ltsmin_parse_env_t env)
   return buffer;
 }
 
+
+int
+check_edgevar(ltsmin_expr_t e)
+{
+    switch (e->token) {
+        case PRED_TRUE:
+        case PRED_FALSE:
+        case PRED_NUM:
+        case PRED_CHUNK:
+            return -1;
+        case PRED_SVAR:
+            return 0;
+        case PRED_EVAR: 
+            return 1; {
+            return e->chunk_cache;
+        }
+        case PRED_NOT:
+            return check_edgevar(e->arg1);
+        case PRED_EQ:
+        case PRED_NEQ:
+        case PRED_AND:
+        case PRED_OR:
+        case PRED_IMPLY:
+        case PRED_EQUIV:
+        case PRED_LT:
+        case PRED_LEQ:
+        case PRED_GT:
+        case PRED_GEQ:
+        case PRED_MULT:
+        case PRED_DIV: 
+        case PRED_REM: 
+        case PRED_ADD: 
+        case PRED_SUB: {
+            return (check_edgevar(e->arg1) != -1) ? check_edgevar(e->arg1) : check_edgevar(e->arg2);
+        }
+        default:
+            return -1;
+    }
+    return -1;
+}
+
+
+
+
 }
 
 spot::twa_graph_ptr spot_automaton;
@@ -164,6 +208,7 @@ create_ltsmin_buchi(spot::twa_graph_ptr& aut)
 
   // fill in the predicates
   int i = 0;
+  ba->edge_predicates = 0;
   ba->predicates = (ltsmin_expr_t*) RTmalloc(ba->predicate_count * sizeof(ltsmin_expr_t));
   std::vector<std::string> pred_vec;
   for (spot::formula ap: aut->ap()) {
@@ -173,7 +218,14 @@ create_ltsmin_buchi(spot::twa_graph_ptr& aut)
     pred_vec.push_back(ap_name);
     ltsmin_expr_t e = ltsmin_expr_lookup(NULL, (char*) ap_name.c_str(), &le_list);
     HREassert(e, "Empty LTL expression");
+
+    int is_edgevar = check_edgevar(e);
+    if (is_edgevar != 0) // both 1 and -1 (-1 contains both state and edge vars)
+      ba->edge_predicates |= (1ULL << i);
+
     ba->predicates[i++] = e;
+
+    // Warning(info, "predicates[%d] = %s : %d %d", i-1, LTSminPrintExpr(e, static_env), check_edgevar(e), ba->edge_predicates);
   }
 
   // states are numbered from 0 to n-1

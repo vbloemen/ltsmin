@@ -22,4 +22,6 @@ extern void set_pins_semantics(model_t model, ltsmin_expr_t e, ltsmin_parse_env_
 
 extern long eval_predicate(model_t model, ltsmin_expr_t e, int *state, ltsmin_parse_env_t env);
 
+extern long eval_predicate_edge(model_t model, ltsmin_expr_t e, int action_label, ltsmin_parse_env_t env);
+
 #endif // PROPERTY_SEMANTICS_H

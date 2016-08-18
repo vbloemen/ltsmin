@@ -137,7 +137,7 @@ printdot_run  (run_t *run, wctx_t *ctx)
         printdot_init (ctx);
 
         for (int i=0; i<100; i++) {
-            if (i > loc->max_index) {
+            if (i >= loc->max_index) {
                 break;
             }
 

@@ -190,10 +190,8 @@ eval (cb_context *infoctx, int *state)
     ltl_context_t *ctx = infoctx->ctx;
     int pred_evals = 0; // assume < 32 predicates..
     for(int i=0; i < ctx->ba->predicate_count; i++) {
-        if ( !is_action_label(ctx, i) ) {
-            if (eval_predicate(GBgetParent(infoctx->model), ctx->ba->predicates[i], state, ctx->ba->env))
-                pred_evals |= (1 << i);
-        }
+        if (eval_predicate(GBgetParent(infoctx->model), ctx->ba->predicates[i], state, ctx->ba->env))
+            pred_evals |= (1 << i);
     }
     return pred_evals;
 }
@@ -201,13 +199,13 @@ eval (cb_context *infoctx, int *state)
 static inline int
 eval_edge (cb_context *infoctx, int action_label)
 {
+    if (action_label == -1) 
+        return 0; // no action_label found
     ltl_context_t *ctx = infoctx->ctx;
     int pred_evals = 0; // assume < 32 predicates..
     for(int i=0; i < ctx->ba->predicate_count; i++) {
-        if ( is_action_label(ctx, i) ) {
-            if (eval_predicate_edge(GBgetParent(infoctx->model), ctx->ba->predicates[i], action_label, ctx->ba->env))
-                pred_evals |= (1 << i);
-        }
+        if (eval_predicate_edge(GBgetParent(infoctx->model), ctx->ba->predicates[i], action_label, ctx->ba->env))
+            pred_evals |= (1 << i);
     }
     return pred_evals;
 }
@@ -230,7 +228,7 @@ void ltl_ltsmin_cb (void *context, transition_info_t *ti, int *dst, int *cpy) {
     // obtain the edge predicates
     lts_type_t ltstype = GBgetLTStype (infoctx->model);
     int action_labels = lts_type_find_edge_label_prefix (ltstype, LTSMIN_EDGE_TYPE_ACTION_PREFIX);
-    int edge_evals = eval_edge (infoctx, ti->labels[action_labels]);
+    int edge_evals =  (action_labels != -1) ? eval_edge (infoctx, ti->labels[action_labels]) : 0;
     // combine the state and edge predicates
     pred_evals = pred_evals | edge_evals;
 
@@ -306,7 +304,7 @@ void ltl_spin_cb (void *context, transition_info_t *ti, int *dst, int *cpy) {
     // obtain the edge predicates
     lts_type_t ltstype = GBgetLTStype (infoctx->model);
     int action_labels = lts_type_find_edge_label_prefix (ltstype, LTSMIN_EDGE_TYPE_ACTION_PREFIX);
-    int edge_evals = eval_edge (infoctx, ti->labels[action_labels]);
+    int edge_evals = (action_labels != -1) ? eval_edge (infoctx, ti->labels[action_labels]) : 0;
     // combine the state and edge predicates
     pred_evals = pred_evals | edge_evals;
 
@@ -332,8 +330,8 @@ void ltl_spin_cb (void *context, transition_info_t *ti, int *dst, int *cpy) {
             }
 
             // printdot info
-            printf("LABEL %d ", ti->labels[action_labels]); // hardcoded
-            printf("BUCHI %d ", dst_buchi[ctx->ltl_idx]);
+            //printf("LABEL %d ", ti->labels[action_labels]); // hardcoded
+            //printf("BUCHI %d ", dst_buchi[ctx->ltl_idx]);
 
             // callback, emit new state, move allowed
             infoctx->cb (infoctx->user_context, ti, dst_buchi,cpy);
@@ -417,7 +415,7 @@ void ltl_textbook_cb (void *c, transition_info_t *ti, int *dst, int *cpy) {
     // obtain the edge predicates
     lts_type_t ltstype = GBgetLTStype (infoctx->model);
     int action_labels = lts_type_find_edge_label_prefix (ltstype, LTSMIN_EDGE_TYPE_ACTION_PREFIX);
-    int edge_evals = eval_edge (infoctx, ti->labels[action_labels]);
+    int edge_evals =  (action_labels != -1) ? eval_edge (infoctx, ti->labels[action_labels]) : 0;
     // combine the state and edge predicates
     dst_pred = dst_pred | edge_evals;
 
