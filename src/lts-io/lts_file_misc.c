@@ -5,7 +5,7 @@
 #include <lts-io/internal.h>
 #include <ltsmin-lib/ltsmin-standard.h>
 
-typedef enum {AUT_FMT, BCG_FMT, DIR_FMT, GCD_FMT, GCF_FMT, FSM_FMT } lts_format_t;
+typedef enum {AUT_FMT, BCG_FMT, DIR_FMT, DOT_FMT, GCD_FMT, GCF_FMT, FSM_FMT } lts_format_t;
 
 static lts_format_t get_fmt(const char*name){
     char *extension=strrchr(name,'.');
@@ -16,6 +16,7 @@ static lts_format_t get_fmt(const char*name){
     if (!strcmp(extension,"gcf")) return GCF_FMT;
     if (!strcmp(extension,"dir")) return DIR_FMT;
     if (!strcmp(extension,"fsm")) return FSM_FMT;
+    if (!strcmp(extension,"dot")) return DOT_FMT;
     if (!strcmp(extension,"bcg"))  {
         #if HAVE_BCG_USER_H
         return BCG_FMT;
@@ -35,6 +36,7 @@ lts_file_t lts_file_create(const char* name,lts_type_t ltstype,int segments,lts_
         case GCD_FMT: return gcd_file_create(name,ltstype,segments,settings);
         case DIR_FMT: return dir_file_create(name,ltstype,segments,settings);
         case FSM_FMT: return fsm_file_create(name,ltstype,segments,settings);
+        case DOT_FMT: return dot_file_create(name,ltstype,segments,settings);
         default: Abort("no submodule can create %s",name);
     }
 }
