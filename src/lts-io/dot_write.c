@@ -7,6 +7,7 @@
 
 #include <hre/user.h>
 #include <lts-io/internal.h>
+#include <ltsmin-lib/ltsmin-standard.h>
 #include <util-lib/chunk_support.h>
 #include <util-lib/tables.h>
 
@@ -47,24 +48,25 @@ static void dot_write_state (lts_file_t file, int seg, void *state, void*labels)
 
     bool buchi_accept = false;
 
-    for (int i=0; i<NS; i++) {   
-        fprintf(file->f, ",");
+    for (int i=0; i<NS; i++) {
         int type_no = lts_type_get_state_label_typeno(lts_type, i);
-        switch(lts_type_get_format(lts_type,type_no)){
-        case LTStypeEnum: 
-        case LTStypeChunk: {
-            value_table_t table = lts_file_get_table(file, type_no);
-            HREassert(table != NULL, "Could not find lts table!");
-            chunk label_c = VTgetChunk(table, lbl[i]);
-            char label_s[label_c.len * 2 + 6]; // magic numbers from aut_io.c
-            chunk2string(label_c, sizeof label_s, label_s);
-            fix_double_quote (label_s);
-            char *type_name = lts_type_get_state_label_name(lts_type, i);
-            if (strcmp(type_name, "buchi_accept") == 0) {
-                if (strcmp(label_s, "'true'") == 0)
-                    buchi_accept = true;
-            } else
-                fprintf(file->f, "%s", label_s);
+            switch(lts_type_get_format(lts_type, type_no)) {
+            case LTStypeEnum: 
+            case LTStypeChunk: 
+            {
+                value_table_t table = lts_file_get_table(file, type_no);
+                HREassert(table != NULL, "Could not find lts table!");
+                chunk label_c = VTgetChunk(table, lbl[i]);
+                char label_s[label_c.len * 2 + 6]; // magic numbers from aut_io.c
+                chunk2string(label_c, sizeof label_s, label_s);
+                fix_double_quote (label_s);
+                char *type_name = lts_type_get_state_label_name(lts_type, i);
+                if (strcmp(type_name, LTSMIN_STATE_LABEL_ACCEPTING) == 0) {
+                    if (strcmp(label_s, "'true'") == 0)
+                        buchi_accept = true;
+                } else if (strcmp(type_name, LTSMIN_STATE_LABEL_WEAK_LTL_PROGRESS) != 0) {
+                    fprintf(file->f, ",%s", label_s);
+                }
             }
         }
     }
@@ -91,22 +93,23 @@ static void dot_write_edge (lts_file_t file, int src_seg, void *src_state,
         if (i != 0)
             fprintf(file->f, "\\n");
         int type_no = lts_type_get_edge_label_typeno(lts_type, i);
-        switch(lts_type_get_format(lts_type,type_no)){
-        case LTStypeEnum: 
-        case LTStypeChunk: {
-            value_table_t table = lts_file_get_table(file, type_no);
-            HREassert(table != NULL, "Could not find lts table!");
-            chunk label_c = VTgetChunk(table, lbl[i]);
-            char label_s[label_c.len * 2 + 6]; // magic numbers from aut_io.c
-            chunk2string(label_c, sizeof label_s, label_s);
-            fix_double_quote (label_s);
-            char *type_name = lts_type_get_edge_label_name(lts_type, i);
-            //fprintf(file->f, "%s:%s", type_name, label_s);
-            fprintf(file->f, "%s", label_s);
-            break;
+        switch(lts_type_get_format(lts_type, type_no)) {
+            case LTStypeEnum: 
+            case LTStypeChunk: 
+            {
+                value_table_t table = lts_file_get_table(file, type_no);
+                HREassert(table != NULL, "Could not find lts table!");
+                chunk label_c = VTgetChunk(table, lbl[i]);
+                char label_s[label_c.len * 2 + 6]; // magic numbers from aut_io.c
+                chunk2string(label_c, sizeof label_s, label_s);
+                fix_double_quote (label_s);
+                char *type_name = lts_type_get_edge_label_name(lts_type, i);
+                //fprintf(file->f, "%s:%s", type_name, label_s);
+                fprintf(file->f, "%s", label_s);
+                break;
             }
-        default:
-            fprintf(file->f, "%d", lbl[i]); // just directly print the label
+            default:
+                fprintf(file->f, "%d", lbl[i]); // just directly print the label
         }
 
     }
