@@ -52,7 +52,8 @@ static void dot_write_state (lts_file_t file, int seg, void *state, void*labels)
         //    fprintf(file->f, "\\n");
         int type_no = lts_type_get_state_label_typeno(lts_type, i);
         switch(lts_type_get_format(lts_type,type_no)){
-        case LTStypeEnum: {
+        case LTStypeEnum: 
+        case LTStypeChunk: {
             value_table_t table = lts_file_get_table(file, type_no);
             HREassert(table != NULL, "Could not find lts table!");
             chunk label_c = VTgetChunk(table, lbl[i]);
@@ -91,7 +92,8 @@ static void dot_write_edge (lts_file_t file, int src_seg, void *src_state,
             fprintf(file->f, "\\n");
         int type_no = lts_type_get_edge_label_typeno(lts_type, i);
         switch(lts_type_get_format(lts_type,type_no)){
-        case LTStypeEnum: {
+        case LTStypeEnum: 
+        case LTStypeChunk: {
             value_table_t table = lts_file_get_table(file, type_no);
             HREassert(table != NULL, "Could not find lts table!");
             chunk label_c = VTgetChunk(table, lbl[i]);
