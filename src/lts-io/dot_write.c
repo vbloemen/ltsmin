@@ -48,8 +48,7 @@ static void dot_write_state (lts_file_t file, int seg, void *state, void*labels)
     bool buchi_accept = false;
 
     for (int i=0; i<NS; i++) {   
-        //if (i != 0)
-        //    fprintf(file->f, "\\n");
+        fprintf(file->f, ",");
         int type_no = lts_type_get_state_label_typeno(lts_type, i);
         switch(lts_type_get_format(lts_type,type_no)){
         case LTStypeEnum: 
@@ -61,10 +60,11 @@ static void dot_write_state (lts_file_t file, int seg, void *state, void*labels)
             chunk2string(label_c, sizeof label_s, label_s);
             fix_double_quote (label_s);
             char *type_name = lts_type_get_state_label_name(lts_type, i);
-            if (strcmp(type_name, "buchi_accept") == 0 && 
-                strcmp(label_s, "'true'") == 0)
-                buchi_accept = true;
-            //fprintf(file->f, "%s:%s", type_name, label_s);
+            if (strcmp(type_name, "buchi_accept") == 0) {
+                if (strcmp(label_s, "'true'") == 0)
+                    buchi_accept = true;
+            } else
+                fprintf(file->f, "%s", label_s);
             }
         }
     }
