@@ -52,8 +52,8 @@
 - Added support for SPOT's LTL to Büchi translation [5]
 
 - Improvements to the multi-core backend (*2lts-mc):
-    - Added a parallel Strongly Connected Components algorithm [4]
-      (--strategy=ufscc).
+    - Added a parallel Strongly Connected Components algorithm
+      (--strategy=ufscc) [4].
     - Added Renault's parallel SCC algorithm (--strategy=renault).
     - Added support for transition-based general büchi automata (TGBAs)
       via UFSCC/Renault and SPOT.
@@ -89,15 +89,15 @@
     - LTSmin now fully supports the Windows platform, since CygWin is available
       in 64 bit.
 
- 1. Bandwidth and Wavefront Reduction for Static Variable Ordering in Symbolic Reachability Analysis -
+1. Bandwidth and Wavefront Reduction for Static Variable Ordering in Symbolic Reachability Analysis -
      http://dx.doi.org/10.1007/978-3-319-40648-0_20
- 2. Complete Results for the 2016 Edition of the Model Checking Contest -
+2. Complete Results for the 2016 Edition of the Model Checking Contest -
      http://mcc.lip6.fr/
- 3. Symbolic Reachability Analysis of B Through ProB and LTSmin -
+3. Symbolic Reachability Analysis of B Through ProB and LTSmin -
      http://dx.doi.org/10.1007/978-3-319-33693-0_18
- 4. Multi-Core On-The-Fly SCC Decomposition -
+4. Multi-Core On-The-Fly SCC Decomposition -
      http://eprints.eemcs.utwente.nl/26873/
- 5. Multi-core SCC-Based LTL Model Checking
+5. Multi-core SCC-Based LTL Model Checking
      http://dx.doi.org/10.1007/978-3-319-49052-6_2
 
 - Known issues:
