@@ -46,3 +46,5 @@ git_version.h.tmp:
 	@echo "#define GIT_VERSION \"$(GIT_DESCRIBE)\"" > $@
 .PHONY: git_version.h.tmp
 endif
+
+pkginclude_HEADERS = feedback.h
