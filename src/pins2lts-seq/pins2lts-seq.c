@@ -1855,6 +1855,10 @@ main (int argc, char *argv[])
     GBloadFile(opt.model,files[0],&opt.model);
 
     lts_type_t ltstype=GBgetLTStype(opt.model);
+    if(ltstype == NULL) {
+        Warning(error, "model does not specify type of LTS (hint: use GBsetLTStype())");
+        HREexit(LTSMIN_EXIT_FAILURE);
+    }
     global.N=lts_type_get_state_length(ltstype);
     global.K=dm_nrows(GBgetDMInfo(opt.model));
     global.T=lts_type_get_type_count(ltstype);

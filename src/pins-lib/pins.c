@@ -709,7 +709,7 @@ void GBsetDMInfo(model_t model, matrix_t *dm_info) {
 }
 
 matrix_t *GBgetDMInfo(model_t model) {
-    if (model->dm_info == NULL) Abort("dependency matrix not set");
+    if (model->dm_info == NULL) Abort("dependency matrix not set (hint: use GBsetDMInfo())");
 	return model->dm_info;
 }
 

@@ -406,6 +406,8 @@ int lts_type_find_type(lts_type_t  t, const char *name) {
 }
 
 void lts_type_validate(lts_type_t t){
+    if (t == NULL)
+        Abort("LTS type is NULL");
     if (t->state_length < 0)
         Abort("unsupported state vector of size %d", t->state_length);
     for(int i=0;i<t->state_length;i++){
