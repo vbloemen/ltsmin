@@ -86,6 +86,13 @@ typedef value_index_t(*put_chunk_t)(value_table_t vt,chunk item);
 extern void VTputChunkSet(value_table_t vt,put_chunk_t method);
 
 /**
+\brief Clone and modify a chunk.
+*/
+extern value_index_t VTcloneAndModifyChunk(value_table_t vt, value_index_t idx, int offset, char* data, int len);
+typedef value_index_t(*clone_and_modify_chunk_t)(value_table_t vt, value_index_t idx, int offset, char* data, int len);
+extern void VTcloneAndModifyChunkSet(value_table_t vt,clone_and_modify_chunk_t method);
+
+/**
 \brief Insert or retrieve a chunk at a particular index.
 */
 extern void VTputAtChunk(value_table_t vt,chunk item,value_index_t pos);

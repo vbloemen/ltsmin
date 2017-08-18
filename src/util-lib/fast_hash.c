@@ -66,6 +66,196 @@ SuperFastHash (const void *data_, int len, uint32_t hash)
     return hash;
 }
 
+uint32_t
+SuperFastHashTwoSource (const void *data_, int len, uint32_t hash, int s2_offset, const void* s2_data, int s2_len)
+{
+    const unsigned char *data = data_;
+    uint32_t tmp;
+    int rem;
+    int s2_offset_rem;
+    int l;
+
+    if (len <= 0 || data == NULL) return 0;
+
+    int intsdone = 0;
+
+    rem = len & 3;
+    s2_offset_rem = s2_offset & 3;
+    //len >>= 2;
+
+    // <--------------><------><---------->
+    // |   |   |   |   |   |   |   |   |   |
+
+    // <---------------><------><--------->
+    // |   |   |   |   |   |   |   |   |   |
+
+    // <----------------><------><-------->
+    // |   |   |   |   |   |   |   |   |   |
+
+    // <-----------------><------><------->
+    // |   |   |   |   |   |   |   |   |   |
+
+
+    // Handle all complete ints before s2
+    l = s2_offset >> 2;
+    for (;l > 0; l--) {
+        hash  += get16bits (data);
+        tmp    = (get16bits (data+2) << 11) ^ hash;
+        hash   = (hash << 16) ^ tmp;
+        data  += 2*sizeof (uint16_t);
+        hash  += hash >> 11;
+        //printf("1 hash after %i: %x\n", intsdone++, hash);
+    }
+
+    // now done:
+    // |   |   |   |   |   |   |   |   |   |
+    // <---------------><------><--------->
+    // oooooooooooooooo
+
+    // Handle the overlap before s2
+    // assume *data is valid
+
+    int dones2 = 0;
+
+    if(s2_offset_rem) {
+        tmp = 0;
+        l = 0;
+        while(l < s2_offset_rem) {
+            tmp |= *data << (l*8);
+            data++;
+            l++;
+        }
+
+        data = (char*)s2_data;
+        int l_from_s2 = s2_offset_rem + s2_len;
+        if(l_from_s2 > 4) {
+            while(l < 4) {
+                tmp |= *data << (l*8);
+                data++;
+                l++;
+            }
+        } else {
+            dones2 = 1;
+            while(l < l_from_s2) {
+                tmp |= *data << (l*8);
+                data++;
+                l++;
+            }
+            data = (char*)data_ + s2_offset + s2_len;
+            while(l < 4) {
+                tmp |= *data << (l*8);
+                data++;
+                l++;
+            }
+        }
+
+        hash  += get16bits (&tmp);
+        tmp    = (get16bits (((unsigned char*)&tmp)+2) << 11) ^ hash;
+        hash   = (hash << 16) ^ tmp;
+        hash  += hash >> 11;
+        //printf("2 hash after %i: %x\n", intsdone++, hash);
+    }
+//    if(s2_offset_rem + (len - s2_offset) >= 4) {
+//        tmp = *data & ((1 << (8*s2_offset_rem)) - 1);
+//        tmp |= (*(uint32_t*)s2_data) << s2_offset_rem*8;
+//        hash  += get16bits (&tmp);
+//        tmp    = (get16bits (((unsigned char*)&tmp)+2) << 11) ^ hash;
+//        hash   = (hash << 16) ^ tmp;
+//        hash  += hash >> 11;
+//        printf("2 hash after %i: %x\n", intsdone++, hash);
+//    }
+
+    // now done:
+    // |   |   |   |   |   |   |   |   |   |
+    // <---------------><------><--------->
+    // ----------------ooooXXXX
+
+    int s2_after_rem = (s2_len - (s2_offset_rem?4 - s2_offset_rem:0));
+    l = s2_after_rem >> 2;
+    s2_after_rem &= 3;
+    if(!dones2) {
+        data = s2_data + (s2_offset_rem?4 - s2_offset_rem:0);
+        for (;l > 0; l--) {
+            hash  += get16bits (data);
+            tmp    = (get16bits (data+2) << 11) ^ hash;
+            hash   = (hash << 16) ^ tmp;
+            data  += 2*sizeof (uint16_t);
+            hash  += hash >> 11;
+            //printf("3 hash after %i: %x\n", intsdone++, hash);
+        }
+
+    // now done:
+    // |   |   |   |   |   |   |   |   |   |
+    // <---------------><------><--------->
+    // --------------------ooooXXXX
+
+        if(s2_after_rem) {
+            tmp = 0;
+            l = 0;
+            while(l < s2_after_rem) {
+                tmp |= *data << (l*8);
+                data++;
+                l++;
+            }
+
+            data = ((char*)data_) + s2_offset + s2_len;
+            while(l < 4) {
+                tmp |= *data << (l*8);
+                data++;
+                l++;
+            }
+
+            hash  += get16bits (&tmp);
+            tmp    = (get16bits (((unsigned char*)&tmp)+2) << 11) ^ hash;
+            hash   = (hash << 16) ^ tmp;
+            hash  += hash >> 11;
+            //printf("4 hash after %i: %x\n", intsdone++, hash);
+        }
+    }
+
+    // now done:
+    // |   |   |   |   |   |   |   |   |   |
+    // <---------------><------><--------->
+    // ------------------------ooooXXXXXXXX
+
+    l = (len - s2_offset - s2_len - (s2_after_rem?4 - s2_after_rem:0)) >> 2;
+    data = ((char*)data_) + s2_offset + s2_len + (s2_after_rem?4 - s2_after_rem:0);
+    for (;l > 0; l--) {
+        hash  += get16bits (data);
+        tmp    = (get16bits (data+2) << 11) ^ hash;
+        hash   = (hash << 16) ^ tmp;
+        data  += 2*sizeof (uint16_t);
+        hash  += hash >> 11;
+        //printf("5 hash after %i: %x\n", intsdone++, hash);
+    }
+
+    /* Handle end cases */
+    switch (rem) {
+        case 3: hash += get16bits (data);
+                hash ^= hash << 16;
+                hash ^= data[sizeof (uint16_t)] << 18;
+                hash += hash >> 11;
+                break;
+        case 2: hash += get16bits (data);
+                hash ^= hash << 11;
+                hash += hash >> 17;
+                break;
+        case 1: hash += *data;
+                hash ^= hash << 10;
+                hash += hash >> 1;
+    }
+
+    /* Force "avalanching" of final 127 bits */
+    hash ^= hash << 3;
+    hash += hash >> 5;
+    hash ^= hash << 4;
+    hash += hash >> 17;
+    hash ^= hash << 25;
+    hash += hash >> 6;
+
+    return hash;
+}
+
 /*
  * Bob Jenkins, <http://burtleburtle.net/bob/hash/doobs.html>
  * One-at-a-Time hash

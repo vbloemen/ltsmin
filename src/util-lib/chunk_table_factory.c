@@ -51,6 +51,15 @@ put_chunk(value_table_t vt,chunk item)
     return (value_index_t)SIputC(si,item.data,item.len);
 }
 
+static value_index_t
+clone_and_modify_chunk(value_table_t vt, value_index_t idx, int offset, char* data, int len)
+{
+    string_index_t si=*((string_index_t*)vt);
+    int len1;
+    char*data1=SIgetC(si,(int)idx,&len1);
+    return (value_index_t)SIput2(si, data1, len1, offset, data, len);
+}
+
 static void
 put_at_chunk(value_table_t vt,chunk item, value_index_t pos)
 {
@@ -119,6 +128,7 @@ simple_chunk_table_create (void *context, char *type_name)
     vt->si = SIcreate();
     VTdestroySet(vt,destroy);
     VTputChunkSet(vt,put_chunk);
+    VTcloneAndModifyChunkSet(vt,clone_and_modify_chunk);
     VTputAtChunkSet(vt,put_at_chunk);
     VTgetChunkSet(vt,get_chunk);
     VTgetCountSet(vt,get_count);

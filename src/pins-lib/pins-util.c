@@ -207,6 +207,13 @@ pins_chunk_put (model_t model,int type_no,const chunk c)
     return VTputChunk (map, c);
 }
 
+int
+pins_chunk_cam (model_t model,int type_no,int chunk_no, int offset, char* data, int len)
+{
+    value_table_t map = GBgetChunkMap (model, type_no);
+    return VTcloneAndModifyChunk (map, chunk_no, offset, data, len);
+}
+
 chunk
 pins_chunk_get (model_t model,int type_no,int chunk_no)
 {

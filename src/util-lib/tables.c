@@ -16,6 +16,7 @@ struct value_table_s {
     put_native_t        put_native;
     get_native_t        get_native;
     put_chunk_t         put_chunk;
+    clone_and_modify_chunk_t         clone_and_modify_chunk;
     put_at_chunk_t      put_at_chunk;
     get_chunk_t         get_chunk;
     vt_get_count_t      get_count;
@@ -41,6 +42,11 @@ static value_index_t missing_put_chunk(value_table_t vt,chunk item){
     (void)vt;(void)item;
     Abort("method put_chunk has not been set");
     return (value_index_t)0;
+}
+
+static void missing_clone_and_modify_chunk(value_table_t vt, int chunk_no, int offset, char* data, int len){
+    (void)vt;(void)chunk_no;(void)offset;(void)data;(void)len;
+    Abort("method clone_and_modify_chunk has not been set");
 }
 
 static void missing_put_at_chunk(value_table_t vt,chunk item,value_index_t pos){
@@ -74,6 +80,7 @@ value_table_t VTcreateBase(char*type_name,size_t user_size){
     object->put_native  = missing_put_native;
     object->get_native  = missing_get_native;
     object->put_chunk   = missing_put_chunk;
+    object->clone_and_modify_chunk = missing_clone_and_modify_chunk;
     object->get_chunk   = missing_get_chunk;
     object->get_count   = missing_get_count;
     object->get_iterator= missing_get_iterator;
@@ -107,10 +114,22 @@ value_index_t VTputChunk(value_table_t vt,chunk item){
     return object->put_chunk(vt,item);
 }
 
+
 void VTputChunkSet(value_table_t vt,put_chunk_t method){
     value_table_t object=USR2SYS(vt);
     object->put_chunk=method?method:missing_put_chunk;
 }
+
+value_index_t VTcloneAndModifyChunk(value_table_t vt,value_index_t idx, int offset, char* data, int len){
+    value_table_t object=USR2SYS(vt);
+    return object->clone_and_modify_chunk(vt, idx, offset, data, len);
+}
+
+void VTcloneAndModifyChunkSet(value_table_t vt,clone_and_modify_chunk_t method){
+    value_table_t object=USR2SYS(vt);
+    object->clone_and_modify_chunk=method?method:missing_clone_and_modify_chunk;
+}
+
 
 void VTputAtChunk(value_table_t vt,chunk item,value_index_t pos){
     value_table_t object=USR2SYS(vt);

@@ -206,6 +206,20 @@ int SIlookupC(string_index_t si,const char*str,int len){
 	return SI_INDEX_FAILED;
 }
 
+int SIlookupCTwoSource(string_index_t si,const char*str,int len, int s2_offset, const char* s2_data, int s2_len){
+	uint32_t hash;
+	int bucket;
+	int idx;
+
+	hash=SuperFastHashTwoSource(str,len,0, s2_offset, s2_data, s2_len);
+	bucket=hash&si->mask;
+	for(idx=si->table[bucket];idx!=END_OF_LIST;idx=si->next[idx]){
+		if (si->len[idx]!=len) continue;
+		if (0==memcmp(str,si->data[idx],len)) return idx;
+	}
+	return SI_INDEX_FAILED;
+}
+
 int SIlookup(string_index_t si,const char*str){
 	return SIlookupC(si,str,strlen(str));
 }
@@ -230,6 +244,45 @@ static void PutEntry(string_index_t si,const char*str,int s_len,int index){
 	si->count++;
 }
 
+static void PutEntryTwoSource(string_index_t si, const char*str, int s_len, int s2_offset, const char* s2_data, int s2_len, int index){
+	uint32_t hash;
+	int bucket;
+
+    ensure_access(si->man,index);
+	HREassert (si->next[index] < 0, "Cannot put %s at %d: position occupied by %s",
+	                                str,index,si->data[index]);
+	HREassert (s2_offset < 0, "Second source out of bounds (%i < 0)",
+	                                s2_offset);
+	HREassert (s2_offset + s2_len <= s_len, "Second source out of bounds (%i + %i > %i)",
+	                                s2_offset, s2_len, s_len);
+	cut_from_free_list(si,index);
+	si->len[index]=s_len;
+	si->data[index]=RTmalloc(s_len+1);
+	memcpy(si->data[index],str,s_len);
+	memcpy(si->data[index] + s2_offset,s2_data,s2_len);
+	(si->data[index])[s_len]=0;
+	hash=SuperFastHash(si->data[index],s_len,0);
+	bucket=hash&si->mask;
+	si->next[index]=si->table[bucket];
+	si->table[bucket]=index;
+	si->count++;
+}
+
+int SIput2(string_index_t si, const char*str, int len, int s2_offset, const char* s2_data, int s2_len){
+	int idx;
+
+	idx=SIlookupCTwoSource(si, str, len, s2_offset, s2_data, s2_len);
+	if (idx!=SI_INDEX_FAILED) {
+		return idx;
+	}
+	if (si->free_list==END_OF_LIST){
+		idx=si->count;
+	} else {
+		idx=si->free_list;
+	}
+	PutEntryTwoSource(si, str, len, s2_offset, s2_data, s2_len, idx);
+	return idx;
+}
 
 int SIputC(string_index_t si,const char*str,int len){
 	int idx;

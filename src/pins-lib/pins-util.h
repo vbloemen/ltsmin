@@ -114,6 +114,7 @@ extern int pins_chunk_count (model_t model, int type_no);
  * WARNING: only to be used at initialization time! Otherwise this operation
  * will fail with an error.
  * This is of interest to: language front-ends
+ * Does NOT claim ownership of the memory in @code c.data.
  * @param model The model in question.
  * @param type_no The type the chunk maps to/from
  * @param c The chunk to be put at the specified index
@@ -121,10 +122,13 @@ extern int pins_chunk_count (model_t model, int type_no);
 */
 extern void pins_chunk_put_at (model_t model, int type_no, const chunk c, int index);
 
+extern int pins_chunk_cam (model_t model,int type_no, int index, int offset, char* data, int len);
+
 /**
  * Put the specified chunk at any index and return the index it was put at.
  * The returned index is in the range [0,GBchunkCount(model,type_no)).
- * This is of interest to: language front-ends
+ * This is of interest to: language front-ends.
+ * Does NOT claim ownership of the memory in @code c.data.
  * @param model The model in question.
  * @param type_no The type the chunk maps to/from.
  * @param c The chunk to be put at any index.
