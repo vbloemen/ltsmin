@@ -33,11 +33,11 @@ extern uf_t     *uf_create ();
 
 /* **************************** list operations **************************** */
 
-extern bool      uf_is_in_list (const uf_t *uf, ref_t state);
+extern bool      uf_is_in_list (const uf_t *uf, ref_t state, int thread_id);
 
-extern pick_e    uf_pick_from_list (const uf_t *uf, ref_t state, ref_t *ret);
+extern pick_e    uf_pick_from_list (const uf_t *uf, ref_t state, ref_t *ret, int thread_id);
 
-extern bool      uf_remove_from_list (const uf_t *uf, ref_t state);
+extern bool      uf_remove_from_list (const uf_t *uf, ref_t state, int thread_id);
 
 /* ********************* 'basic' union find operations ********************* */
 
@@ -46,26 +46,26 @@ extern int       uf_owner (const uf_t *uf, ref_t state, size_t worker);
 
 extern char      uf_make_claim (const uf_t *uf, ref_t state, size_t w_id);
 
-extern ref_t     uf_find (const uf_t *uf, ref_t state);
+extern ref_t     uf_find (const uf_t *uf, ref_t state, int thread_id);
 
-extern bool      uf_sameset (const uf_t *uf, ref_t a, ref_t b);
+extern bool      uf_sameset (const uf_t *uf, ref_t a, ref_t b, int thread_id);
 
-extern bool      uf_union (const uf_t *uf, ref_t a, ref_t b);
+extern bool      uf_union (const uf_t *uf, ref_t a, ref_t b, int thread_id);
 
 /* ******************************* dead SCC ******************************** */
 
-extern bool      uf_is_dead (const uf_t *uf, ref_t state);
+extern bool      uf_is_dead (const uf_t *uf, ref_t state, int thread_id);
 
-extern bool      uf_mark_dead (const uf_t *uf, ref_t state);
+extern bool      uf_mark_dead (const uf_t *uf, ref_t state, int thread_id);
 
 // permanently locks a UF node, regardless of previous value
 bool             uf_try_grab (const uf_t *uf, ref_t a);
 
 /* **************************** TGBA acceptance **************************** */
 
-extern uint32_t  uf_get_acc (const uf_t *uf, ref_t state);
+extern uint32_t  uf_get_acc (const uf_t *uf, ref_t state, int thread_id);
 
-extern uint32_t  uf_add_acc (const uf_t *uf, ref_t state, uint32_t acc);
+extern uint32_t  uf_add_acc (const uf_t *uf, ref_t state, uint32_t acc, int thread_id);
 
 /* ******************************** testing ******************************** */
 

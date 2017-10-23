@@ -15,6 +15,7 @@
 #include <pins2lts-mc/parallel/state-info.h>
 #include <pins2lts-mc/parallel/worker.h>
 #include <util-lib/fast_set.h>
+#include <mc-lib/mclog.h>
 
 #if HAVE_PROFILER
 #include <gperftools/profiler.h>
@@ -73,6 +74,9 @@ extern int reach_scc_seen (void *ext_ctx, transition_info_t *ti,
 void
 ufscc_global_init (run_t *run, wctx_t *ctx)
 {
+    if (ctx->id == 0) {
+        mclog_init(1 << 26, W);
+    }
     (void) run; (void) ctx;
 }
 
@@ -121,7 +125,7 @@ ufscc_local_init (run_t *run, wctx_t *ctx)
         ctx->local->rctx->parent = ctx;
     }
 
-    (void) run; 
+    (void) run;
 }
 
 
@@ -147,6 +151,8 @@ ufscc_handle (void *arg, state_info_t *successor, transition_info_t *ti,
     raw_data_t          stack_loc;
     uint32_t            acc_set   = 0;
 
+    mclog_add(ctx->id, HANDLE_SUC_START);
+
     // TGBA acceptance
     if (ti->labels != NULL && PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA) {
         acc_set = ti->labels[pins_get_accepting_set_edge_label_index(ctx->model)];
@@ -158,7 +164,7 @@ ufscc_handle (void *arg, state_info_t *successor, transition_info_t *ti,
     if (ctx->state->ref == successor->ref) {
         loc->cnt.selfloop ++;
         if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
-            uint32_t acc = uf_add_acc (shared->uf, successor->ref + 1, acc_set);
+            uint32_t acc = uf_add_acc (shared->uf, successor->ref + 1, acc_set, ctx->id);
             if (GBgetAcceptingSet() == acc) {
                 report_lasso (ctx, ctx->state->ref);
             }
@@ -229,7 +235,7 @@ ufscc_init  (wctx_t *ctx)
 
     ufscc_handle (ctx, ctx->initial, &ti, 0);
     claim = uf_make_claim (shared->uf, ctx->initial->ref + 1, ctx->id);
-    
+
     // explore the initial state
     state_data = dfs_stack_top (loc->search_stack);
     state_info_deserialize (ctx->state, state_data); // search_stack TOP
@@ -264,7 +270,7 @@ successor (wctx_t *ctx)
     // TO   = successor = ctx->state
 
     // early backtrack if parent is explored ==> all its children are explored
-    if ( !uf_is_in_list (shared->uf, loc->target->ref + 1) ) {
+    if ( !uf_is_in_list (shared->uf, loc->target->ref + 1, ctx->id) ) {
         dfs_stack_pop (loc->search_stack);
         return;
     }
@@ -302,10 +308,10 @@ successor (wctx_t *ctx)
 
         Debug ("cycle: %zu  --> %zu", loc->target->ref, ctx->state->ref);
 
-        if (uf_sameset (shared->uf, loc->target->ref + 1, ctx->state->ref + 1)) {
+        if (uf_sameset (shared->uf, loc->target->ref + 1, ctx->state->ref + 1, ctx->id)) {
             // add transition acceptance set
             if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
-                uint32_t acc = uf_add_acc (shared->uf, ctx->state->ref + 1, loc->state_acc);
+                uint32_t acc = uf_add_acc (shared->uf, ctx->state->ref + 1, loc->state_acc, ctx->id);
                 if (GBgetAcceptingSet() == acc) {
                     report_lasso (ctx, ctx->state->ref);
                 }
@@ -333,21 +339,21 @@ successor (wctx_t *ctx)
                 // add the acceptance set from the previous root, not the current one
                 // otherwise we could add the acceptance set for the edge
                 // betweem two SCCs (which cannot be part of a cycle)
-                uf_add_acc (shared->uf, loc->root->ref + 1, acc_set);
+                uf_add_acc (shared->uf, loc->root->ref + 1, acc_set, ctx->id);
                 acc_set = loc->root_acc;
             } else if (shared->ltl && pins_state_is_accepting(ctx->model, state_info_state(loc->root))) {
                 accepting = loc->root->ref;
             }
             Debug ("Uniting: %zu and %zu", loc->root->ref, loc->target->ref);
 
-            uf_union (shared->uf, loc->root->ref + 1, loc->target->ref + 1);
+            uf_union (shared->uf, loc->root->ref + 1, loc->target->ref + 1, ctx->id);
 
-        } while ( !uf_sameset (shared->uf, loc->target->ref + 1, ctx->state->ref + 1) );
+        } while ( !uf_sameset (shared->uf, loc->target->ref + 1, ctx->state->ref + 1, ctx->id) );
         dfs_stack_push (loc->roots_stack, root_data);
 
         // after uniting SCC, report lasso
         if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
-            acc_set = uf_get_acc (shared->uf, ctx->state->ref + 1);
+            acc_set = uf_get_acc (shared->uf, ctx->state->ref + 1, ctx->id);
             if (GBgetAcceptingSet() == acc_set) {
                 report_lasso (ctx, ctx->state->ref);
             }
@@ -395,7 +401,7 @@ backtrack (wctx_t *ctx)
 
     // remove ctx->state from the list
     // (no other workers have to explore this state anymore)
-    uf_remove_from_list (shared->uf, ctx->state->ref + 1);
+    uf_remove_from_list (shared->uf, ctx->state->ref + 1, ctx->id);
 
     // store the previous state (from the removed one) in loc->target
     is_last_state = (0 == dfs_stack_nframes (loc->search_stack) );
@@ -408,13 +414,13 @@ backtrack (wctx_t *ctx)
     // - if so: standard backtrack (we don't need to report an SCC)
     // - else:  use pick_from_list to determine if the SCC is completed
     if ( !is_last_state
-         && uf_sameset (shared->uf, loc->target->ref + 1, ctx->state->ref + 1) ) {
+         && uf_sameset (shared->uf, loc->target->ref + 1, ctx->state->ref + 1, ctx->id) ) {
         return; // backtrack in same set
     }
 
     // ctx->state is the last KNOWN state in its SCC (according to this worker)
     // ==> check if we can find another one with pick_from_list
-    pick = uf_pick_from_list (shared->uf, ctx->state->ref + 1, &state_picked);
+    pick = uf_pick_from_list (shared->uf, ctx->state->ref + 1, &state_picked, ctx->id);
 
     if (pick != PICK_SUCCESS) {
         // list is empty ==> SCC is completely explored
@@ -430,8 +436,8 @@ backtrack (wctx_t *ctx)
         }
 
         // we may still have states on the stack of this SCC
-        if ( uf_sameset (shared->uf, loc->target->ref + 1, ctx->state->ref + 1) ) {
-            return; // backtrack in same set 
+        if ( uf_sameset (shared->uf, loc->target->ref + 1, ctx->state->ref + 1, ctx->id) ) {
+            return; // backtrack in same set
             // (the state got marked dead AFTER the previous sameset check)
         }
 
@@ -440,7 +446,7 @@ backtrack (wctx_t *ctx)
         root_data = dfs_stack_top (loc->roots_stack);
         state_info_deserialize (loc->root, root_data); // R.TOP
         // pop from Roots
-        while (uf_sameset (shared->uf, ctx->state->ref + 1, loc->root->ref + 1) ) {
+        while (uf_sameset (shared->uf, ctx->state->ref + 1, loc->root->ref + 1, ctx->id) ) {
             dfs_stack_pop (loc->roots_stack); // R.POP
             root_data = dfs_stack_top (loc->roots_stack);
             state_info_deserialize (loc->root, root_data); // R.TOP
@@ -469,7 +475,9 @@ ufscc_run  (run_t *run, wctx_t *ctx)
     ProfilerStart ("ufscc.perf");
 #endif
 
+    mclog_add(ctx->id, INIT_START);
     ufscc_init (ctx);
+    mclog_add(ctx->id, INIT_END);
 
     // continue until we are done exploring the graph or interrupted
     while ( !run_is_stopped(run) ) {
@@ -482,7 +490,9 @@ ufscc_run  (run_t *run, wctx_t *ctx)
             // store state in ctx->state
             state_info_deserialize (ctx->state, state_data);
 
+            mclog_add(ctx->id, SUCCESSOR_START);
             successor (ctx);
+            mclog_add(ctx->id, SUCCESSOR_END);
         }
         else {
             // there is no state on the current stackframe ==> backtrack
@@ -491,7 +501,9 @@ ufscc_run  (run_t *run, wctx_t *ctx)
             if (0 == dfs_stack_nframes (loc->search_stack))
                 break;
 
+            mclog_add(ctx->id, BACKTRACK_START);
             backtrack (ctx);
+            mclog_add(ctx->id, BACKTRACK_END);
         }
     }
 
@@ -500,6 +512,11 @@ ufscc_run  (run_t *run, wctx_t *ctx)
         Warning(info, "Done profiling");
     ProfilerStop();
 #endif
+
+    if (ctx->id == 0) {
+       mclog_print_stats();
+       mclog_print_file("log.txt");
+    }
 
     if (trc_output && run_is_stopped(run) &&
             global->exit_status != LTSMIN_EXIT_COUNTER_EXAMPLE) {
@@ -581,7 +598,7 @@ ufscc_shared_init   (run_t *run)
 
     set_alg_local_init    (run->alg, ufscc_local_init);
     set_alg_global_init   (run->alg, ufscc_global_init);
-    set_alg_global_deinit (run->alg, ufscc_global_deinit); 
+    set_alg_global_deinit (run->alg, ufscc_global_deinit);
     set_alg_local_deinit  (run->alg, ufscc_local_deinit);
     set_alg_print_stats   (run->alg, ufscc_print_stats);
     set_alg_run           (run->alg, ufscc_run);
@@ -755,7 +772,7 @@ reach_scc_seen (void *ptr, transition_info_t *ti, ref_t ref, int seen)
         Printf (debug, "END\n");
         return 1;
     } else {
-        if (!uf_sameset(shared->uf, ref + 1, shared->lasso_acc + 1)) {
+        if (!uf_sameset(shared->uf, ref + 1, shared->lasso_acc + 1, ctx->id)) {
             Printf (debug, "out\n");
             return 1; // avoid revisiting states outside of SCC
         }

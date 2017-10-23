@@ -13,6 +13,7 @@ libmc_la_SOURCES += dlopen_extra.h
 libmc_la_SOURCES += hashtable.c hashtable.h
 libmc_la_SOURCES += lb.c lb.h
 libmc_la_SOURCES += lmap.c lmap.h
+libmc_la_SOURCES += mclog.c mclog.h
 libmc_la_SOURCES += renault-unionfind.c
 libmc_la_SOURCES += renault-unionfind.h
 libmc_la_SOURCES += set-ll.c set-ll.h
