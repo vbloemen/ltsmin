@@ -121,7 +121,7 @@ ufscc_local_init (run_t *run, wctx_t *ctx)
         ctx->local->rctx->parent = ctx;
     }
 
-    (void) run; 
+    (void) run;
 }
 
 
@@ -160,11 +160,19 @@ ufscc_handle (void *arg, state_info_t *successor, transition_info_t *ti,
         if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
             uint32_t acc = uf_add_acc (shared->uf, successor->ref + 1, acc_set);
             if (GBgetAcceptingSet() == acc) {
-                report_lasso (ctx, ctx->state->ref);
+                if (!trcs_output) {
+                    report_lasso (ctx, ctx->state->ref);
+                } else {
+                    Warning(info, "Found CE");
+                }
             }
         } else if (shared->ltl) { // BA
             if (pins_state_is_accepting(ctx->model, state_info_state(ctx->state)) ) {
-                report_lasso (ctx, ctx->state->ref);
+                if (!trcs_output) {
+                    report_lasso (ctx, ctx->state->ref);
+                } else {
+                    Warning(info, "Found CE");
+                }
             }
         }
         return;
@@ -240,6 +248,12 @@ ufscc_init  (wctx_t *ctx)
         loc->cnt.unique_states ++;
         loc->cnt.unique_trans += transitions;
     }
+
+    if (trcs_output) {
+        Warning(info, "TRACES!");
+    } else {
+        Warning(info, "NO TRACES :(");
+    }
 }
 
 
@@ -307,7 +321,11 @@ successor (wctx_t *ctx)
             if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
                 uint32_t acc = uf_add_acc (shared->uf, ctx->state->ref + 1, loc->state_acc);
                 if (GBgetAcceptingSet() == acc) {
-                    report_lasso (ctx, ctx->state->ref);
+                    if (!trcs_output) {
+                        report_lasso (ctx, ctx->state->ref);
+                    } else {
+                        Warning(info, "Found CE");
+                    }
                 }
             }
             dfs_stack_pop (loc->search_stack);
@@ -349,10 +367,18 @@ successor (wctx_t *ctx)
         if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
             acc_set = uf_get_acc (shared->uf, ctx->state->ref + 1);
             if (GBgetAcceptingSet() == acc_set) {
-                report_lasso (ctx, ctx->state->ref);
+                if (!trcs_output) {
+                    report_lasso (ctx, ctx->state->ref);
+                } else {
+                    Warning(info, "Found CE");
+                }
             }
         } else if (accepting != DUMMY_IDX) {
-            report_lasso (ctx, accepting);
+            if (!trcs_output) {
+                report_lasso (ctx, accepting);
+            } else {
+                Warning(info, "Found CE");
+            }
         }
 
         // cycle is now merged (and DFS stack is unchanged)
