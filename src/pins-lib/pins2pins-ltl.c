@@ -169,7 +169,9 @@ static void
 ltl_sl_all(model_t model, int *state, int *labels)
 {
     ltl_context_t *ctx = GBgetContext(model);
-    GBgetStateLabelsAll(ctx->parent, state + 1, labels);
+    if(GBgetStateLabelInfo(ctx->parent)) {
+        GBgetStateLabelsAll(ctx->parent, state + 1, labels);
+    }
     labels[ctx->sl_idx_accept] = is_accepting (ctx, state);
     if (ctx->sl_idx_nonaccept != -1) {
         labels[ctx->sl_idx_nonaccept] = !is_accepting (ctx, state);
@@ -769,7 +771,16 @@ GBaddLTL (model_t model)
     lts_type_set_format(ltstype_new, bool_type, LTStypeBool);
 
     matrix_t       *p_sl = GBgetStateLabelInfo (model);
-    int             sl_count = dm_nrows (p_sl);
+
+    // Check if the model supplied state label information
+//    if(p_sl == NULL) {
+//        Warning(error, "model does not specify state label information matrix, "
+//                       "needed for LTL (hint: use GBsetStateLabelInfo())"
+//               );
+//        HREabort(LTSMIN_EXIT_FAILURE);
+//    }
+
+    int             sl_count = p_sl ? dm_nrows (p_sl) : 0;
 
     ctx->is_weak = is_weak(ba);
     int             new_sl_count;
@@ -943,12 +954,17 @@ GBaddLTL (model_t model)
     // create new state label matrix
     matrix_t       *p_new_sl = RTmalloc (sizeof *p_new_sl);
 
-    int             sl_len = dm_ncols (p_sl);
-    int             new_sl_len = sl_len + 1;
-    HREassert (new_sl_len == new_len);
+    // Set the state label matrix
+    int sl_len = new_len;
+    if(p_sl) {
+        sl_len = dm_ncols (p_sl);
+        int new_sl_len = sl_len + 1;
+        HREassert (new_sl_len == new_len);
+    }
 
-    dm_create(p_new_sl, new_sl_count, new_sl_len);
-    // copy old matrix
+    dm_create(p_new_sl, new_sl_count, new_len);
+
+    // Copy old state label matrix
     for (int i=0; i < sl_count; ++i) {
         for (int j=0; j < sl_len; ++j) {
             if (dm_is_set(p_sl, i, j))
