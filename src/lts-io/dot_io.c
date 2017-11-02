@@ -21,7 +21,6 @@ struct lts_file_s {
     int stateLabelErrorMessageIndex;
     value_table_t stateErrorMessage;
     int stateErrorMessageIndex;
-//    long long unsigned int root;
     char*name;
     FILE* file;
     int statesSeen;
@@ -32,9 +31,7 @@ static int thinkItIsAString(const char* str, int len) {
     while(p<(str+len) && *p && isprint(*p)) {
         p++;
     }
-    //return (p==(str+len) && len>0);
     if(p<str+len) {
-        //printf("not graph: %i %c\n", *p, *p);
         return len>0 && p+1==str+len;
     } else {
         return len>0;
@@ -67,7 +64,6 @@ static void printMessage(FILE* file, const char* s, size_t len) {
         fprintf(file, "%s", copy);
         free(copy);
     } else {
-//            fprintf(file->file, "[%i]", name, lts_type_get_type(lts_file_get_type(file), typeNo), value);
         for(size_t j=0; j<len; j+=4) {
             fprintf(file, "%02x%02x%02x%02x ", s[j+3], s[j+2], s[j+1], s[j]);
         }
@@ -100,8 +96,6 @@ static void dot_read_close(lts_file_t file) {
 }
 
 static void dot_write_init(lts_file_t file,int seg,void* state) {
-    //uint32_t root=*((uint32_t*)state);
-    //if (seg!=0) Abort("bad initial state %u",seg);
     int index = 0;
 
     file->labelActionName = getenv("LTSMIN_DOT_LABELNAME");
@@ -163,30 +157,10 @@ static void dot_write_edge(lts_file_t file,int src_seg,void* src_state, int dst_
     }
     uint32_t src=*((uint32_t*)src_state);
     uint32_t dst=*((uint32_t*)dst_state);
-//    if (file->root) {
-//        if (src==file->root) {
-//            src=0;
-//        } else if (src==0) {
-//            src=file->root;
-//        }
-//        if (dst==file->root) {
-//            dst=0;
-//        } else if (dst==0) {
-//            dst=file->root;
-//        }
-//    }
     fprintf(file->file, "\t\t %u -> %u [ shape=rectangle", src, dst);
-#if 1
-	printf("dotprinter: %p %p\n", file->labelAction, labels);
     if (file->labelAction && labels) {
         uint32_t* lbl=((uint32_t*)labels);
-//        chunk label_c;
-//        char label_s[label_c.len*2+6];
-//        if(file->labels==NULL) {
-//            sprintf(label_s,"%u",lbl);
         chunk label_c = VTgetChunk(file->labelAction,lbl[file->labelActionIndex]);
-//            chunk2string(label_c,sizeof label_s,label_s);
-//        }
         if(label_c.data && label_c.len>0) fprintf(file->file, ", label = \"%s\"", label_c.data);
     }
     if (file->labelCustomDot && labels) {
@@ -194,73 +168,16 @@ static void dot_write_edge(lts_file_t file,int src_seg,void* src_state, int dst_
         chunk label_c = VTgetChunk(file->labelCustomDot,lbl[file->labelCustomDotIndex]);
         if(label_c.data && label_c.len>0) fprintf(file->file, ", %s", label_c.data);
     }
-#else
-    {
-        int index_max = lts_type_get_edge_label_count(lts_file_get_type(file));
-        index = 0;
-        while(index < index_max) {
-            ++index;
-        }
-    }
-#endif
     fprintf(file->file, " ];\n");
-//    char *bcg_label;
-//    if (strcmp(label_s,LTSMIN_EDGE_VALUE_TAU) && strcmp(label_s,"\"" LTSMIN_EDGE_VALUE_TAU "\"")){
-//        bcg_label=label_s;
-//    } else {
-//        bcg_label="i";
-//    }
-//    BCG_IO_WRITE_BCG_EDGE(src,bcg_label,dst);
-//    fprintf(file->file, "\t");
-//    for(int i=0; i<lts_type_get_state_length(lts_file_get_type(file)); ++i) {
-//        fprintf(file->file, "%u", ((uint32_t*)src_state)[i]);
-//    }
-//    fprintf(file->file, " -> ");
-//    for(int i=0; i<lts_type_get_state_length(lts_file_get_type(file)); ++i) {
-//        fprintf(file->file, "%u", ((uint32_t*)dst_state)[i]);
-//    }
-//    fprintf(file->file, "\n");
 }
 
 static void dot_write_state(lts_file_t file,int seg,__uint32_t *state,__uint32_t* labels) {
 
-#if 0
-    if(lts_type_get_state_length(lts_file_get_type(file))) {
-        fprintf(file->file, "\t %u [ label=\"%u[", file->statesSeen, file->statesSeen);
-        fprintf(file->file, "%u", state[0]);
-        for(int i=1; i<lts_type_get_state_length(lts_file_get_type(file)); ++i) {
-            fprintf(file->file, "-%u", state[i]);
-        }
-        fprintf(file->file,"]");
-        if(lts_type_get_state_label_count(lts_file_get_type(file))) {
-            for(int i=0; i<lts_type_get_state_label_count(lts_file_get_type(file)); ++i) {
-                int typeNo = lts_type_get_state_label_typeno(lts_file_get_type(file), i);
-                if(lts_type_get_format(lts_file_get_type(file), typeNo)==LTStypeChunk) {
-                    value_table_t table = lts_file_get_table(file,typeNo);
-                    fprintf(file->file, "\\n+%s: %s", lts_type_get_state_label_name(lts_file_get_type(file), i), VTgetChunk(table, labels[i]).data);
-                } else {
-                    fprintf(file->file, "\\n-%s: %i", lts_type_get_state_label_name(lts_file_get_type(file), i), labels[i]);
-                }
-            }
-        }
-    } else {
-        fprintf(file->file, "\t %u [ label=\"%u[", *state, *state);
-        if(lts_type_get_state_label_count(lts_file_get_type(file))) {
-            fprintf(file->file, "-%u", labels[0]);
-            for(int i=1; i<lts_type_get_state_label_count(lts_file_get_type(file)); ++i) {
-                fprintf(file->file, "-%u", labels[i]);
-            }
-        }
-    }
-#else
-    //if(lts_type_get_state_length(lts_file_get_type(file))) {
         fprintf(file->file, "\t\t %u [ label=\"{%u|{{state|{", file->statesSeen, file->statesSeen);
         for(int i=0, first=1; i<lts_type_get_state_length(lts_file_get_type(file)); ++i) {
             if(first) { first = 0; } else { fprintf(file->file, "|"); }
             const char* name = lts_type_get_state_name(lts_file_get_type(file), i);
             fprintf(file->file, "{%.3s|%u}", name?name:"??????" , state[i]);
-            //int typeNo = lts_type_get_state_typeno(lts_file_get_type(file), i);
-            //printChunkType(file, lts_type_get_state_name(lts_file_get_type(file), i), typeNo, state[i]);
         }
         fprintf(file->file,"}}");
         if(lts_type_get_state_label_count(lts_file_get_type(file))) {
@@ -269,19 +186,6 @@ static void dot_write_state(lts_file_t file,int seg,__uint32_t *state,__uint32_t
                 if(first) { first = 0; } else { fprintf(file->file, "|"); }
                 const char* name = lts_type_get_state_label_name(lts_file_get_type(file), i);
                 fprintf(file->file, "{%.3s|%u}", name?name:"??????", labels[i]);
-//                int typeNo = lts_type_get_state_label_typeno(lts_file_get_type(file), i);
-//                printChunkType(file, lts_type_get_state_label_name(lts_file_get_type(file), i), typeNo, labels[i]);
-//                if(lts_type_get_format(lts_file_get_type(file), typeNo)==LTStypeChunk) {
-//                    value_table_t table = lts_file_get_table(file,typeNo);
-//                    chunk c = VTgetChunk(table, labels[i]);
-//                    if(thinkItIsAString(c.data, c.len)) {
-//                        fprintf(file->file, "|{%s|%s}", lts_type_get_state_label_name(lts_file_get_type(file), i), c.data);
-//                    } else {
-//                        fprintf(file->file, "|{%s|%i}", lts_type_get_state_label_name(lts_file_get_type(file), i), labels[i]);
-//                    }
-//                } else {
-//                    fprintf(file->file, "|{-%s|%i}", lts_type_get_state_label_name(lts_file_get_type(file), i), labels[i]);
-//                }
             }
             fprintf(file->file, "}}");
         }
@@ -299,17 +203,7 @@ static void dot_write_state(lts_file_t file,int seg,__uint32_t *state,__uint32_t
             if(label_c.data && *label_c.data && label_c.len>0) fprintf(file->file, "|Error: %s", label_c.data);
         }
         fprintf(file->file,"}");
-//    } else {
-//        fprintf(file->file, "\t\t %u [ label=\"%u[", *state, *state);
-//        if(lts_type_get_state_label_count(lts_file_get_type(file))) {
-//            fprintf(file->file, "-%u", labels[0]);
-//            for(int i=1; i<lts_type_get_state_label_count(lts_file_get_type(file)); ++i) {
-//                fprintf(file->file, "-%u", labels[i]);
-//            }
-//        }
-//    }
     fprintf(file->file, "\"");
-#endif
     if (file->stateLabelError && labels) {
         uint32_t* lbl=((uint32_t*)labels);
         if(lbl[file->stateLabelErrorIndex]) fprintf(file->file, ", style=\"filled\", fillcolor=red");
@@ -369,7 +263,6 @@ static void dot_write_close(lts_file_t file) {
             fprintf(file->file, "{%s", lts_type_get_type(lts_file_get_type(file), typeNo));
             int chunkID = 0;
             for(;chunkID<VTgetCount(table); ++chunkID) {
-                //chunk c = VTgetChunk(table, chunkID);
                 fprintf(file->file, "|{%i|", chunkID);
                 printChunkType(file, typeNo, chunkID);
                 fprintf(file->file, "}");
@@ -389,17 +282,7 @@ static void dot_write_close(lts_file_t file) {
     if(types) free(types);
 }
 
-//static void dot_read_close(lts_file_t file) {
-//    if(file->file) fclose(file->file);
-//    file->file = NULL;
-//    printf("CLOSED FILE\n");
-//}
-
 lts_file_t dot_file_create(const char* name,lts_type_t ltstype,int segments,lts_file_t settings) {
-//    if (lts_type_get_state_length(ltstype)) {
-//        Abort("cannot write state to DOT file");
-//    }
-    //if (segments!=1) Abort("DOT files contain precisely 1 segment");
     lts_file_t file=lts_file_bare(name,ltstype,1,settings,sizeof(struct lts_file_s));
     lts_file_set_write_state(file,(lts_write_state_m)dot_write_state);
     lts_file_set_write_init(file,dot_write_init);
