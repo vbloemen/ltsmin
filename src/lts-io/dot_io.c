@@ -10,6 +10,7 @@
 struct lts_file_s {
     value_table_t labelAction;
     int labelActionIndex;
+    char* labelActionName;
     value_table_t labelCustomDot;
     int labelCustomDotIndex;
     value_table_t stateLabelCustomDot;
@@ -102,8 +103,14 @@ static void dot_write_init(lts_file_t file,int seg,void* state) {
     //uint32_t root=*((uint32_t*)state);
     //if (seg!=0) Abort("bad initial state %u",seg);
     int index = 0;
+
+    file->labelActionName = getenv("LTSMIN_DOT_LABELNAME");
+    if(!file->labelActionName) {
+        file->labelActionName = "action";
+    }
+
     index = lts_type_get_edge_label_count(lts_file_get_type(file));
-    while(index-- && strcmp("action",lts_type_get_edge_label_name(lts_file_get_type(file),index)));
+    while(index-- && strcmp(file->labelActionName,lts_type_get_edge_label_name(lts_file_get_type(file),index)));
     if(index>=0) {
         file->labelActionIndex = index;
         int type_no=lts_type_get_edge_label_typeno(lts_file_get_type(file),index);
@@ -341,7 +348,7 @@ static void dot_write_close(lts_file_t file) {
     if(types) {
         for(int typeNo=0; typeNo<lts_type_get_type_count(lts_file_get_type(file)); ++typeNo) {
             if(lts_type_get_format(lts_file_get_type(file), typeNo) != LTStypeChunk) continue;
-            if(!strcmp("action",lts_type_get_type(lts_file_get_type(file), typeNo))) continue;
+            if(!strcmp(file->labelActionName,lts_type_get_type(lts_file_get_type(file), typeNo))) continue;
             if(!strcmp("custom_dot",lts_type_get_type(lts_file_get_type(file), typeNo))) continue;
             value_table_t table = lts_file_get_table(file,typeNo);
             maxChunks = VTgetCount(table)>maxChunks ? VTgetCount(table) : maxChunks;
