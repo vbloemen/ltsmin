@@ -75,6 +75,7 @@ static si_map_entry ORDER[] = {
     {"chain-prev", CHAIN_P},
     {"chain", CHAIN},
     {"none", NONE},
+    {"align", ALIGN},
     {NULL, 0}
 };
 
@@ -200,7 +201,7 @@ struct poptOption options[] = {
 #ifdef HAVE_SYLVAN
             "|par-prev|par" 
 #endif
-            "|none>" },
+            "|align|none>" },
 #ifdef HAVE_SYLVAN
     { "inv-par", 0, POPT_ARG_VAL, &inv_par, 1, "parallelize invariant detection", NULL },
     { "inv-bin-par", 0, POPT_ARG_VAL, &inv_bin_par, 1, "also parallelize every binary operand, may be slow when lots of state labels are to be evaluated (requires --inv-par)", NULL },

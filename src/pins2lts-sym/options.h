@@ -21,6 +21,7 @@ typedef enum {
 #endif
     CHAIN_P,
     CHAIN,
+    ALIGN,
     NONE
 } strategy_t;
 

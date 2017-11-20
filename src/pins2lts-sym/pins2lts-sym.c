@@ -2160,6 +2160,135 @@ reach_bfs(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     (void)visited_old;
 }
 
+// alignments
+static void
+align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
+                   long *eg_count, long *next_count, long *guard_count)
+{
+    vset_t current_level = vset_create(domain, -1, NULL);
+    vset_t next_level = vset_create(domain, -1, NULL);
+
+    vset_copy(current_level, visited);
+    if (save_sat_levels) vset_minus(current_level, visited_old);
+
+    vset_t maybe[nGrps];
+    if (!no_soundness_check) {
+        for (int i = 0; i < nGrps; i++) {
+            maybe[i] = vset_create(domain, -1, NULL);
+        }
+    }
+
+    Warning(info, "TEST");
+    LACE_ME;
+    struct reach_s *root = reach_prepare(0, nGrps);
+
+    int level = 0;
+    while (!vset_is_empty(current_level)) {
+        if (trc_output != NULL) save_level(visited);
+        stats_and_progress_report(current_level, visited, level);
+        level++;
+
+        if (dlk_detect) vset_copy(root->deadlocks, current_level);
+
+        if (inhibit_matrix != NULL) {
+            Warning(info, "IF");
+            // class_enabled holds all states in the current level with transitions in class c
+            // only use current_level, so clear class_enabled...
+            for (int c=0; c<inhibit_class_count; c++) vset_clear(class_enabled[c]);
+
+            // for every class, compute successors, add to next_level
+            for (int c=0; c<inhibit_class_count; c++) {
+                // set container to current level minus enabled transitions from all inhibiting classes
+                vset_copy(root->container, current_level);
+                for (int i=0; i<c; i++) if (dm_is_set(inhibit_matrix,i,c)) vset_minus(root->container, class_enabled[i]);
+                // evaluate all guards
+                learn_guards(root->container, guard_count);
+                // set ancestors to container
+                vset_copy(root->ancestors, root->container);
+                // carry over root->deadlocks from previous iteration
+                // set class and call next function
+                root->class = c;
+                reach_bfs_next(root, reach_groups, maybe);
+                reach_stop(root);
+                if (!no_soundness_check && PINS_USE_GUARDS) {
+                    // For the current level the spec is sound.
+                    // This means that every maybe is actually false.
+                    // We thus remove all maybe's
+                    for (int g = 0; g < nGuards; g++) {
+                        vset_minus(label_true[g], label_false[g]);
+                    }
+                }
+                // update counters
+                *next_count += root->next_count;
+                *eg_count += root->eg_count;
+                // add enabled transitions to class_enabled
+                vset_copy(class_enabled[c], root->ancestors);
+                vset_clear(root->ancestors);
+                // remove visited states
+                vset_minus(root->container, visited);
+                // add new states to next_level
+                vset_union(next_level, root->container);
+                vset_clear(root->container);
+            }
+        } else {
+            Warning(info, "ELSE");
+            // set container to current level
+            vset_copy(root->container, current_level);
+            // evaluate all guards
+            learn_guards(root->container, guard_count);
+            // set ancestors to container
+            if (root->ancestors != NULL) vset_copy(root->ancestors, current_level);
+            // call next function
+            reach_bfs_next(root, reach_groups, maybe);
+            reach_stop(root);
+            if (!no_soundness_check && PINS_USE_GUARDS) {
+                // For the current level the spec is sound.
+                // This means that every maybe is actually false.
+                // We thus remove all maybe's
+                for (int g = 0; g < nGuards; g++) {
+                    vset_minus(label_true[g], label_false[g]);
+                }
+            }
+            // update counters
+            *next_count += root->next_count;
+            *eg_count += root->eg_count;
+            // set next_level to new states (root->container - visited states)
+            vset_copy(next_level, root->container);
+            vset_clear(root->container);
+            vset_minus(next_level, visited);
+        }
+
+        if (sat_strategy == NO_SAT) check_invariants(next_level, level);
+
+        // set current_level to next_level
+        vset_copy(current_level, next_level);
+        vset_clear(next_level);
+
+        if (dlk_detect) {
+            deadlock_check(root->deadlocks, reach_groups);
+            vset_clear(root->deadlocks);
+        }
+
+        vset_union(visited, current_level);
+        vset_reorder(domain);
+    }
+
+    reach_destroy(root);
+    vset_destroy(current_level);
+    vset_destroy(next_level);
+
+    if (!no_soundness_check) {
+        for(int i = 0; i < nGrps; i++) {
+            vset_destroy(maybe[i]);
+        }
+    }
+}
+
+
+
+
+
+
 /**
  * Parallel reachability implementation
  */
@@ -4504,6 +4633,9 @@ static void run_reachability(vset_t states, char *etf_output)
         break;
     case CHAIN:
         reach_proc = reach_chain;
+        break;
+    case ALIGN:
+        reach_proc = align;
         break;
     case NONE:
         reach_proc = reach_none;
