@@ -2178,12 +2178,9 @@ static void
 align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
                    long *eg_count, long *next_count, long *guard_count)
 {
-    Warning(info, "\n\nStarting Align");
-    // TODO: cost function
-
+    (void) visited_old; (void) eg_count; (void) next_count; (void) guard_count; 
     Warning(info, "mapping groups to transitions");
 
-    // TODO: Make constants powers of 2 and do cost function with OR
     // constants
     const int AL_LOG   = 1;
     const int AL_MODEL = 2;
@@ -2199,7 +2196,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
 
     // Figure out which actions belong to which group, and store these in
     // align_groups
-    char *align_acts[4] = {"log", "model", "sync", "tau"};
+    char *align_acts[4] = {"LOG", "MODEL", "SYNC", "TAU"};
     int   align_ids[4]  = {AL_LOG, AL_MODEL, AL_SYNC, AL_TAU};
     int  *align_groups  = RTmalloc(nGrps * sizeof(int));
     for (int i=0; i<nGrps; i++) {
@@ -2240,42 +2237,57 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     }
 
 
-
-    // TODO: use local variables for the groups per action
-
-    Warning(info, "TEST 2");
-
-    // TODO: Create new simple BFS
-
+    // search procedure
     int level = 0;
-    vset_t old_vis = vset_create(domain, -1, NULL);
-    vset_t temp = vset_create(domain, -1, NULL);
+    vset_t cur  = vset_create(domain, -1, NULL);
+    vset_t next = vset_create(domain, -1, NULL);
+    vset_t tmp = vset_create(domain, -1, NULL);
+    vset_copy(next, visited);
 
     LACE_ME;
 
-    // see reach chain
-    while (!vset_equal(visited, old_vis)) {
-        // print info
-        Warning(info, "BFS: level %d", level);
-        stats_and_progress_report(visited, visited, level);
-        vset_copy(old_vis, visited);
-        level ++;
+    // TODO: make use of AL_1 and AL_2 to do the search
+    while (!vset_is_empty(next)) {
+        // cur := next
+        vset_copy(cur, next);
+        // vis := vis ⋃ cur
+        vset_union(visited, cur);
+        // save the current level
+        if (trc_output != NULL) save_level(visited);
+        // tmp := ∅
+        vset_clear(tmp);
+
+        // next state for all groups ( next := suc(cur) )
         for (int i = 0; i < nGrps; i++) {
-            if (align_groups[i] == AL_SYNC) continue; // skip SYNC moves
+            // Filter moves (TODO: improve)
+            if (align_groups[i] == AL_NONE) continue; // skip SYNC moves
             if (!bitvector_is_set(reach_groups,i)) continue;
-            (*next_count) ++;
-            expand_group_next(i, old_vis);
-            vset_next(temp, old_vis, group_next[i]);
-            vset_union(visited, temp);
+
+            // expand transition relations (why?)
+            expand_group_next(i, cur);
+
+            // tmp := suc(cur,group[i])
+            vset_next(tmp, cur, group_next[i]);
+            // next := next ⋃ tmp
+            vset_union(next, tmp);
         }
-        if (sat_strategy == NO_SAT) check_invariants(visited, level);
-        vset_clear(temp);
+        // next := visited ⋂ next (only consider new states)
+        vset_minus(next, visited);
+
+        // print info and increase level
+        stats_and_progress_report(cur, visited, level);
+        level ++;
+
+        // check invariant
+        if (sat_strategy == NO_SAT) check_invariants(next, level);
     }
 
-    vset_destroy(old_vis);
-    vset_destroy(temp);
+    // cleanup
+    vset_destroy(cur);
+    vset_destroy(next);
+    vset_destroy(tmp);
 
-    Warning(info, "DONE exploring\n");
+    Warning(info, "Finished exploring\n");
 }
 
 
