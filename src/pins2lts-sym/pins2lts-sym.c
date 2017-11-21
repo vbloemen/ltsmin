@@ -2160,128 +2160,122 @@ reach_bfs(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     (void)visited_old;
 }
 
+static void print_states(void *context, int *src)
+{
+    Warning(info, " print states: %p %p", context, src);
+
+    /*output_context* ctx = (output_context*)context;
+
+    ctx->src = src;
+    GBgetTransitionsShort(model, ctx->group, ctx->src, etf_edge, context);
+    */
+}
+
+
+
 // alignments
 static void
 align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
                    long *eg_count, long *next_count, long *guard_count)
 {
-    vset_t current_level = vset_create(domain, -1, NULL);
-    vset_t next_level = vset_create(domain, -1, NULL);
+    Warning(info, "\n\nStarting Align");
+    // TODO: cost function
 
-    vset_copy(current_level, visited);
-    if (save_sat_levels) vset_minus(current_level, visited_old);
+    Warning(info, "mapping groups to transitions");
 
-    vset_t maybe[nGrps];
-    if (!no_soundness_check) {
-        for (int i = 0; i < nGrps; i++) {
-            maybe[i] = vset_create(domain, -1, NULL);
-        }
+    // TODO: Make constants powers of 2 and do cost function with OR
+    // constants
+    const int AL_LOG   = 1;
+    const int AL_MODEL = 2;
+    const int AL_SYNC  = 4;
+    const int AL_TAU   = 8;
+    const int AL_NONE  = 16;
+
+    // cost function
+    int AL_0 = AL_TAU | AL_SYNC;
+    int AL_1 = AL_MODEL | AL_LOG;
+
+    Warning(info, "%d - %d", AL_0, AL_1);
+
+    // Figure out which actions belong to which group, and store these in
+    // align_groups
+    char *align_acts[4] = {"log", "model", "sync", "tau"};
+    int   align_ids[4]  = {AL_LOG, AL_MODEL, AL_SYNC, AL_TAU};
+    int  *align_groups  = RTmalloc(nGrps * sizeof(int));
+    for (int i=0; i<nGrps; i++) {
+        align_groups[i] = AL_NONE;
+    }
+    // searches for the different actions and stores in align_groups
+    for (int word=0; word<4; word++) {
+        chunk c = chunk_str(align_acts[word]);
+        act_index = pins_chunk_put (model, action_typeno, c);
+        const int *groups = NULL;
+        const int n = GBgroupsOfEdge(model, act_label, act_index, &groups);
+        if (n > 0) {
+            for (int group = 0; group < n; group++) {
+                Warning(infoLong, "Found \"%s\" potentially in group %d",
+                        align_acts[word], groups[group]);
+                // check if there is overlap in the groups
+                HREassert(align_groups[groups[group]] == AL_NONE,
+                        "Transition occurs in multiple groups");
+                align_groups[groups[group]] = align_ids[word];
+            }
+        } else Warning(infoLong,
+                "No group will ever produce action \"%s\"", align_acts[word]);
     }
 
-    Warning(info, "TEST");
-    LACE_ME;
-    struct reach_s *root = reach_prepare(0, nGrps);
+    bool print_al_groups = true;
+    if (print_al_groups) {
+        printf("align groups: [");
+        for (int i=0; i<nGrps; i++) {
+            printf(" %d:",i);
+            if (align_groups[i] == AL_LOG) printf("LOG");
+            else if (align_groups[i] == AL_MODEL) printf("MODEL");
+            else if (align_groups[i] == AL_SYNC) printf("SYNC");
+            else if (align_groups[i] == AL_TAU) printf("TAU");
+            else if (align_groups[i] == AL_NONE) printf("NONE");
+            else printf("???");
+        }
+        printf(" ]\n");
+    }
+
+
+
+    // TODO: use local variables for the groups per action
+
+    Warning(info, "TEST 2");
+
+    // TODO: Create new simple BFS
 
     int level = 0;
-    while (!vset_is_empty(current_level)) {
-        if (trc_output != NULL) save_level(visited);
-        stats_and_progress_report(current_level, visited, level);
-        level++;
+    vset_t old_vis = vset_create(domain, -1, NULL);
+    vset_t temp = vset_create(domain, -1, NULL);
 
-        if (dlk_detect) vset_copy(root->deadlocks, current_level);
+    LACE_ME;
 
-        if (inhibit_matrix != NULL) {
-            Warning(info, "IF");
-            // class_enabled holds all states in the current level with transitions in class c
-            // only use current_level, so clear class_enabled...
-            for (int c=0; c<inhibit_class_count; c++) vset_clear(class_enabled[c]);
-
-            // for every class, compute successors, add to next_level
-            for (int c=0; c<inhibit_class_count; c++) {
-                // set container to current level minus enabled transitions from all inhibiting classes
-                vset_copy(root->container, current_level);
-                for (int i=0; i<c; i++) if (dm_is_set(inhibit_matrix,i,c)) vset_minus(root->container, class_enabled[i]);
-                // evaluate all guards
-                learn_guards(root->container, guard_count);
-                // set ancestors to container
-                vset_copy(root->ancestors, root->container);
-                // carry over root->deadlocks from previous iteration
-                // set class and call next function
-                root->class = c;
-                reach_bfs_next(root, reach_groups, maybe);
-                reach_stop(root);
-                if (!no_soundness_check && PINS_USE_GUARDS) {
-                    // For the current level the spec is sound.
-                    // This means that every maybe is actually false.
-                    // We thus remove all maybe's
-                    for (int g = 0; g < nGuards; g++) {
-                        vset_minus(label_true[g], label_false[g]);
-                    }
-                }
-                // update counters
-                *next_count += root->next_count;
-                *eg_count += root->eg_count;
-                // add enabled transitions to class_enabled
-                vset_copy(class_enabled[c], root->ancestors);
-                vset_clear(root->ancestors);
-                // remove visited states
-                vset_minus(root->container, visited);
-                // add new states to next_level
-                vset_union(next_level, root->container);
-                vset_clear(root->container);
-            }
-        } else {
-            Warning(info, "ELSE");
-            // set container to current level
-            vset_copy(root->container, current_level);
-            // evaluate all guards
-            learn_guards(root->container, guard_count);
-            // set ancestors to container
-            if (root->ancestors != NULL) vset_copy(root->ancestors, current_level);
-            // call next function
-            reach_bfs_next(root, reach_groups, maybe);
-            reach_stop(root);
-            if (!no_soundness_check && PINS_USE_GUARDS) {
-                // For the current level the spec is sound.
-                // This means that every maybe is actually false.
-                // We thus remove all maybe's
-                for (int g = 0; g < nGuards; g++) {
-                    vset_minus(label_true[g], label_false[g]);
-                }
-            }
-            // update counters
-            *next_count += root->next_count;
-            *eg_count += root->eg_count;
-            // set next_level to new states (root->container - visited states)
-            vset_copy(next_level, root->container);
-            vset_clear(root->container);
-            vset_minus(next_level, visited);
+    // see reach chain
+    while (!vset_equal(visited, old_vis)) {
+        // print info
+        Warning(info, "BFS: level %d", level);
+        stats_and_progress_report(visited, visited, level);
+        vset_copy(old_vis, visited);
+        level ++;
+        for (int i = 0; i < nGrps; i++) {
+            if (align_groups[i] == AL_SYNC) continue; // skip SYNC moves
+            if (!bitvector_is_set(reach_groups,i)) continue;
+            (*next_count) ++;
+            expand_group_next(i, old_vis);
+            vset_next(temp, old_vis, group_next[i]);
+            vset_union(visited, temp);
         }
-
-        if (sat_strategy == NO_SAT) check_invariants(next_level, level);
-
-        // set current_level to next_level
-        vset_copy(current_level, next_level);
-        vset_clear(next_level);
-
-        if (dlk_detect) {
-            deadlock_check(root->deadlocks, reach_groups);
-            vset_clear(root->deadlocks);
-        }
-
-        vset_union(visited, current_level);
-        vset_reorder(domain);
+        if (sat_strategy == NO_SAT) check_invariants(visited, level);
+        vset_clear(temp);
     }
 
-    reach_destroy(root);
-    vset_destroy(current_level);
-    vset_destroy(next_level);
+    vset_destroy(old_vis);
+    vset_destroy(temp);
 
-    if (!no_soundness_check) {
-        for(int i = 0; i < nGrps; i++) {
-            vset_destroy(maybe[i]);
-        }
-    }
+    Warning(info, "DONE exploring\n");
 }
 
 
