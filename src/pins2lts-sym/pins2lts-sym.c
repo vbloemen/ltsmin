@@ -2179,7 +2179,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
                    long *eg_count, long *next_count, long *guard_count)
 {
     (void) visited_old; (void) eg_count; (void) next_count; (void) guard_count; 
-    Warning(info, "mapping groups to transitions");
+    Warning(info, "Mapping groups to transitions");
 
     // constants
     const int AL_LOG   = 1;
@@ -2191,8 +2191,6 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     // cost function
     int AL_0 = AL_TAU | AL_SYNC;
     int AL_1 = AL_MODEL | AL_LOG;
-
-    Warning(info, "%d - %d", AL_0, AL_1);
 
     // Figure out which actions belong to which group, and store these in
     // align_groups
@@ -2221,7 +2219,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
                 "No group will ever produce action \"%s\"", align_acts[word]);
     }
 
-    bool print_al_groups = true;
+    bool print_al_groups = false;
     if (print_al_groups) {
         printf("align groups: [");
         for (int i=0; i<nGrps; i++) {
@@ -2236,6 +2234,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
         printf(" ]\n");
     }
 
+    Warning(info, "Performing the uniform-cost shortest path search");
 
     // search procedure
     int level = 0;
@@ -2246,7 +2245,8 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
 
     LACE_ME;
 
-    // TODO: make use of AL_1 and AL_2 to do the search
+    // AL_x is the current transition set to use
+    int AL_x = AL_0;
     while (!vset_is_empty(next)) {
         // cur := next
         vset_copy(cur, next);
@@ -2256,11 +2256,12 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
         if (trc_output != NULL) save_level(visited);
         // tmp := ∅
         vset_clear(tmp);
+        vset_clear(next);
 
         // next state for all groups ( next := suc(cur) )
         for (int i = 0; i < nGrps; i++) {
-            // Filter moves (TODO: improve)
-            if (align_groups[i] == AL_NONE) continue; // skip SYNC moves
+            // Filter moves to only take AL_x transitions
+            if ((align_groups[i] & AL_x) == 0) continue;
             if (!bitvector_is_set(reach_groups,i)) continue;
 
             // expand transition relations (why?)
@@ -2280,6 +2281,14 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
 
         // check invariant
         if (sat_strategy == NO_SAT) check_invariants(next, level);
+
+        // possibly switch between AL_0 and AL_1
+        if (vset_is_empty(next) && AL_x == AL_0) {
+            AL_x = AL_1;
+            vset_copy(next, visited);
+        } else if (AL_x == AL_1) {
+            AL_x = AL_0;
+        }
     }
 
     // cleanup
