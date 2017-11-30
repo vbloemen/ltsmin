@@ -2239,19 +2239,28 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     // search procedure
     int level = 0;
     vset_t cur  = vset_create(domain, -1, NULL);
+    vset_t cur0  = vset_create(domain, -1, NULL);
     vset_t next = vset_create(domain, -1, NULL);
     vset_t tmp = vset_create(domain, -1, NULL);
     vset_copy(next, visited);
 
     LACE_ME;
 
+    bool REPORT_STATS = true;
+    //clock_t start = clock(), diff;
+    struct timespec now, tmstart;
+    clock_gettime(CLOCK_REALTIME, &tmstart);
+
+
     // AL_x is the current transition set to use
     int AL_x = AL_0;
+    Warning(info,"Starting AL_0\n");
     while (!vset_is_empty(next)) {
         // cur := next
         vset_copy(cur, next);
         // vis := vis ⋃ cur
         vset_union(visited, cur);
+        if (AL_x == AL_0) vset_union(cur0, cur);
         // save the current level
         if (trc_output != NULL) save_level(visited);
         // tmp := ∅
@@ -2263,33 +2272,65 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
             // Filter moves to only take AL_x transitions
             if ((align_groups[i] & AL_x) == 0) continue;
             if (!bitvector_is_set(reach_groups,i)) continue;
-
             // expand transition relations (why?)
             expand_group_next(i, cur);
-
             // tmp := suc(cur,group[i])
             vset_next(tmp, cur, group_next[i]);
+            // tmp := visited ⋂ tmp (only consider new states)
+            vset_minus(tmp, visited);
             // next := next ⋃ tmp
             vset_union(next, tmp);
         }
-        // next := visited ⋂ next (only consider new states)
-        vset_minus(next, visited);
 
         // print info and increase level
-        stats_and_progress_report(cur, visited, level);
+        stats_and_progress_report(next, visited, level);
         level ++;
+
+        // print statistics (AL_x, level, time_ms, states_cur, states_vis)
+        if (REPORT_STATS) {
+            if (AL_x == AL_0)  printf("AL_0");
+            else if (AL_x == AL_1)  printf("AL_1");
+
+            // level
+            printf(",%d",level);
+
+            // timing info
+            clock_gettime(CLOCK_REALTIME, &now);
+            double seconds = (double)((now.tv_sec+now.tv_nsec*1e-9)
+                           - (double)(tmstart.tv_sec+tmstart.tv_nsec*1e-9));
+            //diff = clock() - start;
+            //int msec = diff * 1000 / CLOCKS_PER_SEC;
+            printf(",%f", seconds);//d.%d",msec/1000,msec%1000);
+            //start = clock();
+            clock_gettime(CLOCK_REALTIME, &tmstart);
+
+            // states
+            long n_count;
+            long double e_count;
+            if (next != NULL) {
+                int digs = vset_count_fn(next, &n_count, &e_count);
+                printf(",%.*Lg",digs,e_count);
+            } else printf(",0");
+            int digs = vset_count_fn (visited, &n_count, &e_count);
+            printf(",%.*Lg", digs, e_count);
+            printf("\n");
+        }
 
         // check invariant
         if (sat_strategy == NO_SAT) check_invariants(next, level);
 
         // possibly switch between AL_0 and AL_1
         if (vset_is_empty(next) && AL_x == AL_0) {
+            Warning(info,"Starting AL_1\n");
             AL_x = AL_1;
-            vset_copy(next, visited);
+            vset_copy(next, cur0);
         } else if (AL_x == AL_1) {
+            Warning(info,"Starting AL_0\n");
             AL_x = AL_0;
+            vset_clear(cur0);
         }
-    }
+
+    } // ALIGNTODO
 
     // cleanup
     vset_destroy(cur);
