@@ -2243,6 +2243,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     vset_t next = vset_create(domain, -1, NULL);
     vset_t tmp = vset_create(domain, -1, NULL);
     vset_copy(next, visited);
+    vset_copy(cur0, visited);
 
     LACE_ME;
 
@@ -2260,7 +2261,6 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
         vset_copy(cur, next);
         // vis := vis ⋃ cur
         vset_union(visited, cur);
-        if (AL_x == AL_0) vset_union(cur0, cur);
         // save the current level
         if (trc_output != NULL) save_level(visited);
         // tmp := ∅
@@ -2285,6 +2285,8 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
         // print info and increase level
         stats_and_progress_report(next, visited, level);
         level ++;
+
+        if (AL_x == AL_0) vset_union(cur0, next);
 
         // print statistics (AL_x, level, time_ms, states_cur, states_vis)
         if (REPORT_STATS) {
@@ -2327,7 +2329,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
         } else if (AL_x == AL_1) {
             Warning(info,"Starting AL_0\n");
             AL_x = AL_0;
-            vset_clear(cur0);
+            vset_copy(cur0,next);
         }
 
     } // ALIGNTODO
