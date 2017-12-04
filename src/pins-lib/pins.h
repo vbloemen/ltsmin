@@ -268,6 +268,9 @@ extern void GBsetDMInfoMustWrite(model_t model, matrix_t *dm_info);
 /**< @brief Write the initial state of model into state. */
 extern void GBgetInitialState(model_t model, int* state);
 
+/**< @brief Write the final state of model into state. */
+extern void GBgetFinalState(model_t model, int* state);
+
 /** 
  * Type of the callback function for returning lists of transitions.
  * We produce the list of transitions by means of a callback, which
@@ -287,6 +290,7 @@ is provided with a user context, an array of labels and a state vector.
 */
 
 extern int GBgetTransitionsShort(model_t model,int group,int*src,TransitionCB cb,void*context);
+extern int GBgetTransitionsPrevShort(model_t model,int group,int*src,TransitionCB cb,void*context);
 /**< @brief Enumerate the transition of a group for a short state.
 
 Given a group number and a short vector for that group, enumerate the local
@@ -295,6 +299,7 @@ Given a group number and a short vector for that group, enumerate the local
 
 
 extern int GBgetTransitionsShortR2W(model_t model,int group,int*src,TransitionCB cb,void*context);
+extern int GBgetTransitionsPrevShortR2W(model_t model,int group,int*src,TransitionCB cb,void*context);
 /**< @brief Enumerate the transition of a group for a read short state.
 
 Given a group number and a short vector for that group, enumerate the local
@@ -302,6 +307,7 @@ Given a group number and a short vector for that group, enumerate the local
  */
 
 extern int GBgetTransitionsLong(model_t model,int group,int*src,TransitionCB cb,void*context);
+extern int GBgetTransitionsPrevLong(model_t model,int group,int*src,TransitionCB cb,void*context);
 /**< @brief Enumerate the transition of a group for a long state.
 
 Given a group number and a long vector for that group, enumerate the local
@@ -310,6 +316,7 @@ Given a group number and a long vector for that group, enumerate the local
  */
 
 extern int GBgetActionsShort(model_t model,int group,int*src,TransitionCB cb,void*context);
+extern int GBgetActionsPrevShort(model_t model,int group,int*src,TransitionCB cb,void*context);
 /**< @brief Enumerate the actions (without guards) for a short state
 
 Given a group number and a short vector for that group, enumerate the local
@@ -317,6 +324,7 @@ Given a group number and a short vector for that group, enumerate the local
  */
 
 extern int GBgetActionsShortR2W(model_t model,int group,int*src,TransitionCB cb,void*context);
+extern int GBgetActionsPrevShortR2W(model_t model,int group,int*src,TransitionCB cb,void*context);
 /**< @brief Enumerate the actions (without guards) for a read short state
 
 Given a group number and a short vector for that group, enumerate the local
@@ -324,6 +332,7 @@ Given a group number and a short vector for that group, enumerate the local
  */
 
 extern int GBgetActionsLong(model_t model,int group,int*src,TransitionCB cb,void*context);
+extern int GBgetActionsPrevLong(model_t model,int group,int*src,TransitionCB cb,void*context);
 /**< @brief Enumerate the actions (without guards) for a long state
 
 Given a group number and a long vector for that group, enumerate the local
@@ -345,6 +354,7 @@ extern int GBgetTransitionsMatching(model_t model,int label_idx,int value,int*sr
 
 
 extern int GBgetTransitionsAll(model_t model,int*src,TransitionCB cb,void*context);
+extern int GBgetTransitionsPrevAll(model_t model,int*src,TransitionCB cb,void*context);
 /**< @brief Enumerate the transitions of all groups for a long state.
 
 Of course it would be equivalent to just call GBgetTransitionsLong for all groups,
@@ -611,6 +621,14 @@ extern int *GBgetPorStateLabelVisibility(model_t model);
 extern void GBsetInitialState(model_t model, int*state);
 
 /**
+ * \brief Set the final state.
+ *
+ * The final state is used in the symbolic backend for the PNML tool, to
+ * perform reachability from both sides.
+ */
+extern void GBsetFinalState(model_t model, int*state);
+
+/**
  * \brief Type of the greybox next state method.
  * This is the definition of the callback method that will be called in the
  * search for next states given a current state. See GBsetNextStateLong().
@@ -657,6 +675,7 @@ typedef int(*next_method_grey_t)(model_t self,int group,int*src,TransitionCB cb,
  * @param method The function that will be assigned to the specified model.
  */
 extern void GBsetNextStateLong(model_t model,next_method_grey_t method);
+extern void GBsetPrevStateLong(model_t model,next_method_grey_t method);
 
 /**
  * Set the grey box next state method of the specified model to the specified
@@ -690,6 +709,7 @@ extern void GBsetNextStateLong(model_t model,next_method_grey_t method);
  * @param method The function that will be assigned to the specified model.
  */
 extern void GBsetNextStateShort(model_t model,next_method_grey_t method);
+extern void GBsetPrevStateShort(model_t model,next_method_grey_t method);
 
 /**
 \brief Set the next state method that works on short vectors.
@@ -699,6 +719,7 @@ or write dependencies (target state).
 If this method is not set then the long version is used.
 */
 extern void GBsetNextStateShortR2W(model_t model,next_method_grey_t method);
+extern void GBsetPrevStateShortR2W(model_t model,next_method_grey_t method);
 
 /**
 \brief Set the next state method that works on long vectors.
@@ -706,6 +727,7 @@ extern void GBsetNextStateShortR2W(model_t model,next_method_grey_t method);
 If this method is not set then the short version is used.
 */
 extern void GBsetActionsLong(model_t model,next_method_grey_t method);
+extern void GBsetActionsPrevLong(model_t model,next_method_grey_t method);
 
 /**
 \brief Set the next state method that works on short vectors.
@@ -713,6 +735,7 @@ extern void GBsetActionsLong(model_t model,next_method_grey_t method);
 If this method is not set then the long version is used.
 */
 extern void GBsetActionsShort(model_t model,next_method_grey_t method);
+extern void GBsetActionsPrevShort(model_t model,next_method_grey_t method);
 
 /**
 \brief Set the next state method that works on short vectors.
@@ -722,6 +745,7 @@ or write dependencies (target state).
 If this method is not set then the long version is used.
 */
 extern void GBsetActionsShortR2W(model_t model,next_method_grey_t method);
+extern void GBsetActionsPrevShortR2W(model_t model,next_method_grey_t method);
 
 /**
 \brief Type of the greybox next state matching method.
@@ -748,6 +772,7 @@ typedef int(*next_method_black_t)(model_t self,int*src,TransitionCB cb,void*user
  * @param method The function that will be assigned to the specified model.
  */
 extern void GBsetNextStateAll(model_t model, next_method_black_t method);
+extern void GBsetPrevStateAll(model_t model, next_method_black_t method);
 
 /**
  * \brief Type of the get all labels method.

@@ -197,6 +197,109 @@ get_successor_short(void *model, int t, int *in, TransitionCB cb, void *arg)
 }
 
 static int
+get_predecessor_long(void *model, int t, int *in, TransitionCB cb, void *arg)
+{
+    pn_context_t *pn_context = GBgetContext(model);
+
+    int out[NUM_PLACES];
+    memcpy (out, in, sizeof(int[NUM_PLACES]));
+
+    int overflown = 0;
+    int max = 0;
+    for (arc_t *arc = pn_context->arcs + pn_context->transitions[t].start; arc->transition == t; arc++) {
+        switch(arc->type) {
+            case ARC_OUT: {
+                // check precondition
+                if (out[arc->place] - arc->num < 0) return 0; // underflow (token count < 0)
+
+                // remove tokens
+                out[arc->place] -= arc->num;
+            }
+            break;
+            case ARC_IN: {
+                // establish postcondition
+                if (arc->safe) out[arc->place] = arc->num;
+                else {
+                    // detect overflow and report later (only if transition is enabled)
+                    overflown |= out[arc->place] > INT_MAX - arc->num;
+
+                    // add tokens
+                    out[arc->place] += arc->num;
+
+                    // record max token count
+                    if (out[arc->place] > max) max = out[arc->place];
+                }
+            }
+            break;
+            case ARC_LAST: break;
+        }
+    }
+
+    if (overflown) Abort ("max token count exceeded");
+    update_max (max);
+
+    int lbl[1] = { pn_context->transitions[t].label };
+    transition_info_t transition_info = { lbl, t, 0 };
+    cb (arg, &transition_info, out, NULL);
+
+    return 1;
+}
+
+static int
+get_predecessor_short(void *model, int t, int *in, TransitionCB cb, void *arg)
+{
+    pn_context_t *pn_context = GBgetContext(model);
+
+    HREassert(!pn_context->has_safe_places, "get_predecessor_short not compatible with safe places");
+
+    const int num_writes = dm_ones_in_row(GBgetDMInfoMustWrite(model), t);
+
+    int out[num_writes];
+    memcpy (out, in, sizeof(int[num_writes]));
+    int *place = out;
+
+    int overflown = 0;
+    int max = 0;
+    for (arc_t *arc = pn_context->arcs + pn_context->transitions[t].start; arc->transition == t; arc++) {
+        switch(arc->type) {
+            case ARC_OUT: {
+                // check precondition
+                if (*place - arc->num < 0) return 0; // underflow (token count < 0)
+
+                // remove tokens
+                *place -= arc->num;
+            }
+            break;
+            case ARC_IN: {
+                // establish postcondition
+
+                // detect overflow and report later (only if transition is enabled)
+                overflown |= *place > INT_MAX - arc->num;
+
+                // add tokens
+                *place += arc->num;
+
+                // record max token count
+                if (*place > max) max = *place;
+            }
+            break;
+            case ARC_LAST: break;
+        }
+        if (arc->place != (arc + 1)->place) place++;
+    }
+
+    if (overflown) Abort ("max token count exceeded");
+    update_max (max);
+
+    int lbl[1] = { pn_context->transitions[t].label };
+    transition_info_t transition_info = { lbl, t, 0 };
+    cb (arg, &transition_info, out, NULL);
+
+    return 1;
+}
+
+
+static int
 get_update_long(void *model, int t, int *in, TransitionCB cb, void *arg)
 {
     pn_context_t *pn_context = GBgetContext(model);
@@ -302,6 +405,115 @@ get_update_short(void *model, int t, int *in, void
 
     return 1;
 }
+
+static int
+get_update_prev_long(void *model, int t, int *in, TransitionCB cb, void *arg)
+{
+    pn_context_t *pn_context = GBgetContext(model);
+
+    int out[NUM_PLACES];
+    memcpy (out, in, sizeof(int[NUM_PLACES]));
+
+    int overflown = 0;
+    int max = 0;
+    for (arc_t *arc = pn_context->arcs + pn_context->transitions[t].start; arc->transition == t; arc++) {
+        switch(arc->type) {
+            case ARC_OUT: {
+                /*If there is an underflow then this transition is disabled,
+                 *while it should not be, since this is the update function. */
+                HREassert(out[arc->place] - arc->num >= 0, "transition should not have been disabled");
+
+                // remove tokens
+                out[arc->place] -= arc->num;
+            }
+            break;
+            case ARC_IN: {
+                // establish postcondition
+                if (arc->safe) out[arc->place] = arc->num;
+                else {
+                    // detect overflow and report later (only if transition is enabled)
+                    overflown |= out[arc->place] > INT_MAX - arc->num;
+
+                    // add tokens
+                    out[arc->place] += arc->num;
+
+                    // record max token count
+                    if (out[arc->place] > max) max = out[arc->place];
+                }
+            }
+            break;
+            case ARC_LAST: break;
+        }
+    }
+
+    if (overflown) Abort ("max token count exceeded");
+    update_max (max);
+
+    int lbl[1] = { pn_context->transitions[t].label };
+    transition_info_t transition_info = { lbl, t, 0 };
+    cb (arg, &transition_info, out, NULL);
+
+    return 1;
+}
+
+static int
+get_update_prev_short(void *model, int t, int *in, void
+(*callback)(void *arg, transition_info_t *transition_info, int *out, int *cpy), void *arg)
+{
+    pn_context_t *pn_context = GBgetContext(model);
+
+    HREassert(!pn_context->has_safe_places, "get_update_prev_short not compatible with safe places");
+
+    const int num_writes = dm_ones_in_row(GBgetDMInfoMustWrite(model), t);
+
+    int out[num_writes];
+    memcpy (out, in, sizeof(int[num_writes]));
+    int *place = out;
+
+    int overflown = 0;
+    int max = 0;
+    for (arc_t *arc = pn_context->arcs + pn_context->transitions[t].start; arc->transition == t; arc++) {
+        switch(arc->type) {
+            case ARC_OUT: {
+                // check precondition
+
+                /* If there is an underflow then this transition is disabled,
+                 * while it should not be, since this is the update function. */
+                HREassert(*place - arc->num >= 0, "transition should not have been disabled");
+
+                // remove tokens
+                *place -= arc->num;
+            }
+            break;
+            case ARC_IN: {
+                // establish postcondition
+
+                // detect overflow and report later (only if transition is enabled)
+                overflown |= *place > INT_MAX - arc->num;
+
+                // add tokens
+                *place += arc->num;
+
+                // record max token count
+                if (*place > max) max = *place;
+            }
+            break;
+            case ARC_LAST: break;
+        }
+        if (arc->place != (arc + 1)->place) place++;
+    }
+
+    if (overflown) Abort ("max token count exceeded");
+    update_max (max);
+
+    int lbl[1] = { pn_context->transitions[t].label };
+    transition_info_t transition_info = { lbl, t, 0 };
+    callback (arg, &transition_info, out, NULL);
+
+    return 1;
+}
+
+
 
 static int
 get_label_long(model_t model, int label, int *src) {
@@ -443,6 +655,20 @@ parse_net(xmlNode *a_node, pn_context_t *pn_context, string_index_t trans_names,
                     }
                         
                     pn_context->init_state[num] = val;
+                    if (val > max_token_count) max_token_count = val;
+                } else if (xmlStrcmp(node->parent->name, (const xmlChar*) "finalMarking") == 0) {
+                    int num;
+                    if ((num = SIlookup(pn_context->place_names, (char*) id)) == SI_INDEX_FAILED) Abort("missing place");
+                    const int val = atoi((char*) xmlNodeGetContent(node));
+                    
+                    // test if the value fits in an int
+                    char buf[strlen((char*) xmlNodeGetContent(node)) + 1];
+                    sprintf(buf, "%d", val);
+                    if (strcmp(buf, (char*) xmlNodeGetContent(node)) != 0) {
+                        Abort("Make sure the final marking \"%s\" fits in a signed 32-bit integer", xmlNodeGetContent(node));
+                    }
+                        
+                    pn_context->final_state[num] = val;
                     if (val > max_token_count) max_token_count = val;
                 } else if (xmlStrcmp(node->parent->name, (const xmlChar*) "inscription") == 0) {
                     int num;
@@ -851,7 +1077,9 @@ set_dependencies(model_t model)
     }
 
     GBsetInitialState (model, pn_context->init_state);
+    GBsetFinalState (model, pn_context->final_state);
     RTfree (pn_context->init_state);
+    RTfree (pn_context->final_state);
 
     attach_arcs (pn_context);
     
@@ -935,12 +1163,18 @@ set_dependencies(model_t model)
 
     // get next state
     GBsetNextStateLong (model, (next_method_grey_t) get_successor_long);
+    GBsetPrevStateLong (model, (next_method_grey_t) get_predecessor_long);
     GBsetActionsLong (model, (next_method_grey_t) get_update_long);
+    GBsetActionsPrevLong (model, (next_method_grey_t) get_update_prev_long);
     if (!pn_context->has_safe_places) {
         GBsetNextStateShort (model, (next_method_grey_t) get_successor_short);
+        GBsetPrevStateShort (model, (next_method_grey_t) get_predecessor_short);
         GBsetActionsShort (model, (next_method_grey_t) get_update_short);
+        GBsetActionsPrevShort (model, (next_method_grey_t) get_update_prev_short);
         GBsetNextStateShortR2W (model, (next_method_grey_t) get_successor_short);
+        GBsetPrevStateShortR2W (model, (next_method_grey_t) get_predecessor_short);
         GBsetActionsShortR2W (model, (next_method_grey_t) get_update_short);
+        GBsetActionsPrevShortR2W (model, (next_method_grey_t) get_update_prev_short);
     } else Print1 (infoLong, "Since this net has 1-safe places, short next-state functions are not used");
 
     init_groups_of_edge(pn_context);
@@ -1044,6 +1278,7 @@ ANDLloadGreyboxModel(model_t model, const char *name)
     ADD_ARRAY(andl_context.arc_man, andl_context.pn_context->arcs, arc_t);
     ADD_ARRAY(andl_context.trans_man, andl_context.pn_context->transitions, transition_t);
     ADD_ARRAY(andl_context.init_man, andl_context.pn_context->init_state, int);
+    ADD_ARRAY(andl_context.init_man, andl_context.pn_context->final_state, int);
    
     andl_parse(scanner, &andl_context);
     andl_lex_destroy(scanner);
@@ -1096,6 +1331,7 @@ PNMLloadGreyboxModel(model_t model, const char *name)
         }
     }
     pn_context->init_state = RTmallocZero(sizeof(int[NUM_PLACES]));
+    pn_context->final_state = RTmallocZero(sizeof(int[NUM_PLACES]));
 
     create_lts_type(model);
 

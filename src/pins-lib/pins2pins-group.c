@@ -156,6 +156,21 @@ actions_long (model_t self, int group, int *newsrc, TransitionCB cb,
     return long_(self, group, newsrc, cb, user_context, &GBgetActionsLong);
 }
 
+
+static int
+group_prev_long (model_t self, int group, int *newsrc, TransitionCB cb,
+            void *user_context)
+{
+    return long_(self, group, newsrc, cb, user_context, &GBgetTransitionsPrevLong);
+}
+
+static int
+actions_prev_long (model_t self, int group, int *newsrc, TransitionCB cb,
+            void *user_context)
+{
+    return long_(self, group, newsrc, cb, user_context, &GBgetActionsPrevLong);
+}
+
 static int
 group_all (model_t self, int *newsrc, TransitionCB cb,
             void *user_context)
@@ -1179,6 +1194,10 @@ GBregroup (model_t model)
     GBsetActionsLong(group, actions_long);
     GBsetNextStateAll (group, group_all);
 
+    GBsetPrevStateLong (group, group_prev_long);
+    GBsetActionsPrevLong(group, actions_prev_long);
+    GBsetPrevStateAll (group, group_all);
+
     // fill statemapping: assumption this is a bijection
     {
         int                 Nparts = dm_ncols (r);
@@ -1334,6 +1353,16 @@ GBregroup (model_t model)
         for (int i = 0; i < len; i++)
             news0[i] = s0[ctx->statemap[i]];
         GBsetInitialState (group, news0);
+    }
+
+    // permute final state
+    {
+        int                 len = ctx->len;
+        int                 sf[len], newsf[len];
+        GBgetFinalState (model, sf);
+        for (int i = 0; i < len; i++)
+            newsf[i] = sf[ctx->statemap[i]];
+        GBsetFinalState (group, newsf);
     }
 
     RTstopTimer(t);

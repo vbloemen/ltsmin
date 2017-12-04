@@ -38,15 +38,23 @@ struct grey_box_model {
     int *group_visibility;
     int *label_visibility;
 	int *s0;
+	int *sf; // final state
 	void *context;
     next_method_grey_t next_short;
+    next_method_grey_t prev_short;
     next_method_grey_t next_short_r2w;
+    next_method_grey_t prev_short_r2w;
 	next_method_grey_t next_long;
+	next_method_grey_t prev_long;
     next_method_grey_t actions_short;
+    next_method_grey_t actions_prev_short;
     next_method_grey_t actions_short_r2w;
+    next_method_grey_t actions_prev_short_r2w;
     next_method_grey_t actions_long;
+    next_method_grey_t actions_prev_long;
 	next_method_matching_t next_matching;
 	next_method_black_t next_all;
+	next_method_black_t prev_all;
 	get_label_method_t state_labels_short;
 	get_label_method_t state_labels_long;
 	get_label_group_method_t state_labels_group;
@@ -181,6 +189,20 @@ int default_short(model_t self,int group,int*src,TransitionCB cb,void*context){
     return self->next_long(self,group,long_src,project_dest,&info);
 }
 
+int default_prev_short(model_t self,int group,int*src,TransitionCB cb,void*context){
+    struct nested_cb info;
+    info.model = self;
+    info.group = group;
+    info.src=src;
+    info.cb=cb;
+    info.user_ctx=context;
+
+    int long_src[dm_ncols(GBgetDMInfo(self))];
+    dm_expand_vector(GBgetDMInfo(self), group, self->sf, src, long_src);
+
+    return self->prev_long(self,group,long_src,project_dest,&info);
+}
+
 int default_short_r2w(model_t self,int group,int*src,TransitionCB cb,void*context){
     struct nested_cb info;
     info.model = self;
@@ -193,6 +215,20 @@ int default_short_r2w(model_t self,int group,int*src,TransitionCB cb,void*contex
     dm_expand_vector(GBgetDMInfoRead(self), group, self->s0, src, long_src);
 
     return self->next_long(self,group,long_src,project_dest_write,&info);
+}
+
+int default_prev_short_r2w(model_t self,int group,int*src,TransitionCB cb,void*context){
+    struct nested_cb info;
+    info.model = self;
+    info.group = group;
+    info.src=src;
+    info.cb=cb;
+    info.user_ctx=context;
+
+    int long_src[dm_ncols(GBgetDMInfoRead(self))];
+    dm_expand_vector(GBgetDMInfoRead(self), group, self->sf, src, long_src);
+
+    return self->prev_long(self,group,long_src,project_dest_write,&info);
 }
 
 void expand_dest(void*context,transition_info_t*ti,int*dst, int*cpy){
@@ -225,6 +261,21 @@ int default_long(model_t self,int group,int*src,TransitionCB cb,void*context){
 	return self->next_short(self,group,src_short,expand_dest,&info);
 }
 
+int default_prev_long(model_t self,int group,int*src,TransitionCB cb,void*context){
+	struct nested_cb info;
+	info.model = self;
+	info.group = group;
+	info.src=src;
+	info.cb=cb;
+	info.user_ctx=context;
+
+	const int len = dm_ones_in_row(GBgetDMInfo(self), group);
+	int src_short[len];
+	dm_project_vector(GBgetDMInfo(self), group, src, src_short);
+
+	return self->prev_short(self,group,src_short,expand_dest,&info);
+}
+
 int default_actions_short(model_t self,int group,int*src,TransitionCB cb,void*context){
     struct nested_cb info;
     info.model = self;
@@ -236,6 +287,19 @@ int default_actions_short(model_t self,int group,int*src,TransitionCB cb,void*co
     int long_src[dm_ncols(GBgetDMInfo(self))];
     dm_expand_vector(GBgetDMInfo(self), group, self->s0, src, long_src);
     return self->actions_long(self,group,long_src,project_dest,&info);
+}
+
+int default_actions_prev_short(model_t self,int group,int*src,TransitionCB cb,void*context){
+    struct nested_cb info;
+    info.model = self;
+    info.group = group;
+    info.src=src;
+    info.cb=cb;
+    info.user_ctx=context;
+
+    int long_src[dm_ncols(GBgetDMInfo(self))];
+    dm_expand_vector(GBgetDMInfo(self), group, self->sf, src, long_src);
+    return self->actions_prev_long(self,group,long_src,project_dest,&info);
 }
 
 int default_actions_short_r2w(model_t self,int group,int*src,TransitionCB cb,void*context){
@@ -251,6 +315,21 @@ int default_actions_short_r2w(model_t self,int group,int*src,TransitionCB cb,voi
     int long_src[dm_ncols(read)];
     dm_expand_vector(read, group, self->s0, src, long_src);
     return self->actions_long(self,group,long_src,project_dest_write,&info);
+}
+
+int default_actions_prev_short_r2w(model_t self,int group,int*src,TransitionCB cb,void*context){
+    struct nested_cb info;
+    info.model = self;
+    info.group = group;
+    info.src=src;
+    info.cb=cb;
+    info.user_ctx=context;
+
+    matrix_t* read = GBgetMatrix(self, GBgetMatrixID(self, LTSMIN_MATRIX_ACTIONS_READS));
+
+    int long_src[dm_ncols(read)];
+    dm_expand_vector(read, group, self->sf, src, long_src);
+    return self->actions_prev_long(self,group,long_src,project_dest_write,&info);
 }
 
 int default_actions_long(model_t self,int group,int*src,TransitionCB cb,void*context){
@@ -270,6 +349,24 @@ int default_actions_long(model_t self,int group,int*src,TransitionCB cb,void*con
     return self->actions_short(self,group,src_short,expand_dest,&info);
 }
 
+int default_actions_prev_long(model_t self,int group,int*src,TransitionCB cb,void*context){
+    struct nested_cb info;
+    info.model = self;
+    info.group = group;
+    info.src=src;
+    info.cb=cb;
+    info.user_ctx=context;
+
+    matrix_t* read = GBgetMatrix(self, GBgetMatrixID(self, LTSMIN_MATRIX_ACTIONS_READS));
+
+    const int len = dm_ones_in_row(read, group);
+    int src_short[len];
+    dm_project_vector(read, group, src, src_short);
+
+    return self->actions_prev_short(self,group,src_short,expand_dest,&info);
+}
+
+
 int GBgetTransitionsMarked(model_t self,matrix_t* matrix,int row,int*src,TransitionCB cb,void*context){
     int N=dm_ncols(matrix);
     int res=0;
@@ -285,6 +382,14 @@ int default_all(model_t self,int*src,TransitionCB cb,void*context){
 	int res=0;
 	for(int i=0; i < dm_nrows(GBgetDMInfo(self)); i++) {
 		res+=self->next_long(self,i,src,cb,context);
+	}
+	return res;
+}
+
+int default_prev_all(model_t self,int*src,TransitionCB cb,void*context){
+	int res=0;
+	for(int i=0; i < dm_nrows(GBgetDMInfo(self)); i++) {
+		res+=self->prev_long(self,i,src,cb,context);
 	}
 	return res;
 }
@@ -352,9 +457,21 @@ wrapped_default_short (model_t self,int group,int*src,TransitionCB cb,void*conte
 }
 
 int
+wrapped_default_prev_short (model_t self,int group,int*src,TransitionCB cb,void*context)
+{
+    return GBgetTransitionsPrevShort (GBgetParent(self), group, src, cb, context);
+}
+
+int
 wrapped_default_short_r2w (model_t self,int group,int*src,TransitionCB cb,void*context)
 {
     return GBgetTransitionsShortR2W (GBgetParent(self), group, src, cb, context);
+}
+
+int
+wrapped_default_prev_short_r2w (model_t self,int group,int*src,TransitionCB cb,void*context)
+{
+    return GBgetTransitionsPrevShortR2W (GBgetParent(self), group, src, cb, context);
 }
 
 int
@@ -364,9 +481,21 @@ wrapped_default_long (model_t self,int group,int*src,TransitionCB cb,void*contex
 }
 
 int
+wrapped_default_prev_long (model_t self,int group,int*src,TransitionCB cb,void*context)
+{
+    return GBgetTransitionsPrevLong (GBgetParent(self), group, src, cb, context);
+}
+
+int
 wrapped_default_actions_short (model_t self,int group,int*src,TransitionCB cb,void*context)
 {
     return GBgetActionsShort (GBgetParent(self), group, src, cb, context);
+}
+
+int
+wrapped_default_actions_prev_short (model_t self,int group,int*src,TransitionCB cb,void*context)
+{
+    return GBgetActionsPrevShort (GBgetParent(self), group, src, cb, context);
 }
 
 int
@@ -376,15 +505,33 @@ wrapped_default_actions_short_r2w (model_t self,int group,int*src,TransitionCB c
 }
 
 int
+wrapped_default_actions_prev_short_r2w (model_t self,int group,int*src,TransitionCB cb,void*context)
+{
+    return GBgetActionsPrevShortR2W (GBgetParent(self), group, src, cb, context);
+}
+
+int
 wrapped_default_actions_long (model_t self,int group,int*src,TransitionCB cb,void*context)
 {
     return GBgetActionsLong (GBgetParent(self), group, src, cb, context);
 }
 
 int
+wrapped_default_actions_prev_long (model_t self,int group,int*src,TransitionCB cb,void*context)
+{
+    return GBgetActionsPrevLong (GBgetParent(self), group, src, cb, context);
+}
+
+int
 wrapped_default_all (model_t self,int*src,TransitionCB cb,void*context)
 {
     return GBgetTransitionsAll(GBgetParent(self), src, cb, context);
+}
+
+int
+wrapped_default_prev_all (model_t self,int*src,TransitionCB cb,void*context)
+{
+    return GBgetTransitionsPrevAll(GBgetParent(self), src, cb, context);
 }
 
 static int
@@ -482,13 +629,20 @@ model_t GBcreateBase(){
     model->gnes_info=NULL;
     model->gnds_info=NULL;
 	model->s0=NULL;
+	model->sf=NULL;
 	model->context=0;
     model->next_short=default_short;
+    model->prev_short=default_prev_short;
     model->next_short_r2w=default_short_r2w;
+    model->prev_short_r2w=default_prev_short_r2w;
 	model->next_long=default_long;
+	model->prev_long=default_prev_long;
     model->actions_short=default_actions_short;
+    model->actions_prev_short=default_actions_prev_short;
     model->actions_short_r2w=default_actions_short_r2w;
+    model->actions_prev_short_r2w=default_actions_prev_short_r2w;
     model->actions_long=default_actions_long;
+    model->actions_prev_long=default_actions_prev_long;
 	model->next_matching=next_matching_default;
 	model->next_all=default_all;
 	model->state_labels_short=state_labels_default_short;
@@ -605,6 +759,13 @@ void GBinitModelDefaults (model_t *p_model, model_t default_src)
         GBgetInitialState(default_src, s0);
         GBsetInitialState(model, s0);
     }
+    if (model->sf == NULL) {
+        int N = lts_type_get_state_length (GBgetLTStype (default_src));
+        int sf[N];
+        GBgetFinalState(default_src, sf);
+        GBsetFinalState(model, sf);
+    }
+
     if (model->context == NULL)
         GBsetContext(model, GBgetContext(default_src));
 
@@ -635,6 +796,7 @@ void GBinitModelDefaults (model_t *p_model, model_t default_src)
         model->actions_short_r2w == default_actions_short_r2w &&
         model->actions_long == default_actions_long &&
         model->next_all == default_all) {
+        Warning(info, "TEST DEFAULT SHORT");
         GBsetNextStateShort (model, wrapped_default_short);
         GBsetNextStateShortR2W (model, wrapped_default_short_r2w);
         GBsetNextStateLong (model, wrapped_default_long);
@@ -642,6 +804,23 @@ void GBinitModelDefaults (model_t *p_model, model_t default_src)
         GBsetActionsLong (model, wrapped_default_actions_long);
         GBsetActionsShort (model, wrapped_default_actions_short);
         GBsetActionsShortR2W (model, wrapped_default_actions_short_r2w);
+    }
+
+    if (model->prev_short == default_prev_short &&
+        model->prev_short_r2w == default_prev_short_r2w &&
+        model->prev_long == default_prev_long &&
+        model->actions_short == default_actions_prev_short &&
+        model->actions_short_r2w == default_actions_prev_short_r2w &&
+        model->actions_long == default_actions_prev_long &&
+        model->prev_all == default_prev_all) {
+        Warning(info, "TEST DEFAULT PREV SHORT");
+        GBsetPrevStateShort (model, wrapped_default_prev_short);
+        GBsetPrevStateShortR2W (model, wrapped_default_prev_short_r2w);
+        GBsetPrevStateLong (model, wrapped_default_prev_long);
+        GBsetPrevStateAll (model, wrapped_default_prev_all);
+        GBsetActionsLong (model, wrapped_default_actions_prev_long);
+        GBsetActionsShort (model, wrapped_default_actions_prev_short);
+        GBsetActionsShortR2W (model, wrapped_default_actions_prev_short_r2w);
     }
 
     if (model->state_labels_short == state_labels_default_short &&
@@ -799,6 +978,17 @@ void GBsetInitialState(model_t model,int *state){
 	}
 }
 
+void GBsetFinalState(model_t model,int *state){
+	if (model->ltstype==NULL)
+            Abort("must set ltstype before setting final state");
+	RTfree (model->sf);
+	int len=lts_type_get_state_length(model->ltstype);
+	model->sf=(int*)RTmalloc(len * sizeof(int));
+	for(int i=0;i<len;i++){
+		model->sf[i]=state[i];
+	}
+}
+
 void GBgetInitialState(model_t model,int *state){
 	int len=lts_type_get_state_length(model->ltstype);
 	for(int i=0;i<len;i++){
@@ -806,52 +996,107 @@ void GBgetInitialState(model_t model,int *state){
 	}
 }
 
+void GBgetFinalState(model_t model,int *state){
+	int len=lts_type_get_state_length(model->ltstype);
+	for(int i=0;i<len;i++){
+		state[i]=model->sf[i];
+	}
+}
+
 void GBsetActionsShort(model_t model,next_method_grey_t method){
     model->actions_short=method;
+}
+
+void GBsetActionsPrevShort(model_t model,next_method_grey_t method){
+    model->actions_prev_short=method;
 }
 
 void GBsetActionsShortR2W(model_t model, next_method_grey_t method) {
     model->actions_short_r2w=method;
 }
 
+void GBsetActionsPrevShortR2W(model_t model, next_method_grey_t method) {
+    model->actions_prev_short_r2w=method;
+}
+
 int GBgetActionsShort(model_t model,int group,int*src,TransitionCB cb,void*context){
     return model->actions_short(model,group,src,cb,context);
+}
+
+int GBgetActionsPrevShort(model_t model,int group,int*src,TransitionCB cb,void*context){
+    return model->actions_prev_short(model,group,src,cb,context);
 }
 
 int GBgetActionsShortR2W(model_t model,int group,int*src,TransitionCB cb,void*context){
     return model->actions_short_r2w(model,group,src,cb,context);
 }
 
+int GBgetActionsPrevShortR2W(model_t model,int group,int*src,TransitionCB cb,void*context){
+    return model->actions_prev_short_r2w(model,group,src,cb,context);
+}
+
 void GBsetActionsLong(model_t model,next_method_grey_t method){
     model->actions_long=method;
+}
+
+void GBsetActionsPrevLong(model_t model,next_method_grey_t method){
+    model->actions_prev_long=method;
 }
 
 int GBgetActionsLong(model_t model,int group,int*src,TransitionCB cb,void*context){
     return model->actions_long(model,group,src,cb,context);
 }
 
+int GBgetActionsPrevLong(model_t model,int group,int*src,TransitionCB cb,void*context){
+    return model->actions_prev_long(model,group,src,cb,context);
+}
+
 void GBsetNextStateShort(model_t model,next_method_grey_t method){
     model->next_short=method;
+}
+
+void GBsetPrevStateShort(model_t model,next_method_grey_t method){
+    model->prev_short=method;
 }
 
 void GBsetNextStateShortR2W(model_t model,next_method_grey_t method){
     model->next_short_r2w=method;
 }
 
+void GBsetPrevStateShortR2W(model_t model,next_method_grey_t method){
+    model->prev_short_r2w=method;
+}
+
 int GBgetTransitionsShort(model_t model,int group,int*src,TransitionCB cb,void*context){
     return model->next_short(model,group,src,cb,context);
+}
+
+int GBgetTransitionsPrevShort(model_t model,int group,int*src,TransitionCB cb,void*context){
+    return model->prev_short(model,group,src,cb,context);
 }
 
 int GBgetTransitionsShortR2W(model_t model,int group,int*src,TransitionCB cb,void*context){
     return model->next_short_r2w(model,group,src,cb,context);
 }
 
+int GBgetTransitionsPrevShortR2W(model_t model,int group,int*src,TransitionCB cb,void*context){
+    return model->prev_short_r2w(model,group,src,cb,context);
+}
+
 void GBsetNextStateLong(model_t model,next_method_grey_t method){
 	model->next_long=method;
 }
 
+void GBsetPrevStateLong(model_t model,next_method_grey_t method){
+	model->prev_long=method;
+}
+
 int GBgetTransitionsLong(model_t model,int group,int*src,TransitionCB cb,void*context){
 	return model->next_long(model,group,src,cb,context);
+}
+
+int GBgetTransitionsPrevLong(model_t model,int group,int*src,TransitionCB cb,void*context){
+	return model->prev_long(model,group,src,cb,context);
 }
 
 void GBsetNextStateMatching(model_t model,next_method_matching_t method){
@@ -886,8 +1131,16 @@ void GBsetNextStateAll(model_t model,next_method_black_t method){
 	model->next_all=method;
 }
 
+void GBsetPrevStateAll(model_t model,next_method_black_t method){
+	model->prev_all=method;
+}
+
 int GBgetTransitionsAll(model_t model,int*src,TransitionCB cb,void*context){
 	return model->next_all(model,src,cb,context);
+}
+
+int GBgetTransitionsPrevAll(model_t model,int*src,TransitionCB cb,void*context){
+	return model->prev_all(model,src,cb,context);
 }
 
 void GBsetStateLabelsAll(model_t model,get_label_all_method_t method){

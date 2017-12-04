@@ -103,6 +103,9 @@ static model_t model;
 static vrel_t *group_next;
 static vset_t *group_explored;
 static vset_t *group_tmp;
+static vrel_t *group_prev;
+static vset_t *group_prev_explored;
+static vset_t *group_prev_tmp;
 static vset_t *label_false = NULL; // 0
 static vset_t *label_true = NULL;  // 1
 static vset_t *label_tmp;
@@ -134,6 +137,7 @@ typedef void (*guided_proc_t)(sat_proc_t sat_proc, reach_proc_t reach_proc,
 typedef int (*transitions_t)(model_t model,int group,int*src,TransitionCB cb,void*context);
 
 static transitions_t transitions_short = NULL; // which function to call for the next states.
+static transitions_t transitions_prev_short = NULL; // which function to call for the prev states.
 
 typedef int(*vset_count_t)(vset_t set, long* nodes, long double* elements);
 
@@ -1096,6 +1100,16 @@ seen_actions_test (int idx)
     return BVLLtry_set_sat_bit(seen_actions, idx, 0);
 }
 
+/*
+static void
+group_add_prev(void *context, transition_info_t *ti, int *dst, int *cpy)
+{
+    struct group_add_info *ctx = (struct group_add_info*)context;
+
+    vrel_add_cpy(ctx->rel, dst, ctx->src, cpy);
+    (void) ti;
+}*/
+
 static void
 group_add(void *context, transition_info_t *ti, int *dst, int *cpy)
 {
@@ -1176,6 +1190,33 @@ explore_cb(vrel_t rel, void *context, int *src)
     }
 }
 
+
+
+static void
+explore_cb_prev(vrel_t rel, void *context, int *src)
+{
+    struct group_add_info ctx;
+    ctx.group = ((struct group_add_info*)context)->group;
+    ctx.set = ((struct group_add_info*)context)->set;
+    ctx.rel = rel;
+    ctx.src = src;
+    ctx.trace_count = 0;
+    ctx.trace_action = NULL;
+    (*transitions_prev_short)(model, ctx.group, src, group_add, &ctx);
+
+    if (ctx.trace_count > 0) {
+        int long_src[N];
+        for (int i = 0; i < ctx.trace_count; i++) {
+            vset_example_match(ctx.set,long_src,r_projs[ctx.group].len, r_projs[ctx.group].proj,src);
+            find_action(long_src,ctx.trace_action[i].dst,ctx.trace_action[i].cpy,ctx.group,ctx.trace_action[i].action);
+            RTfree(ctx.trace_action[i].dst);
+            if (ctx.trace_action[i].cpy != NULL) RTfree(ctx.trace_action[i].cpy);
+        }
+
+        RTfree(ctx.trace_action);
+    }
+}
+
 #ifdef HAVE_SYLVAN
 #define expand_group_next(g, s) CALL(expand_group_next, (g), (s))
 VOID_TASK_2(expand_group_next, int, group, vset_t, set)
@@ -1231,6 +1272,57 @@ expand_group_next_projected(vrel_t rel, vset_t set, void *context)
     vrel_update_seq(rel, set, explore_cb, &group_ctx);
 #endif
 }
+
+#ifdef HAVE_SYLVAN
+#define expand_group_prev(g, s) CALL(expand_group_prev, (g), (s))
+VOID_TASK_2(expand_group_prev, int, group, vset_t, set)
+#else
+static void expand_group_prev(int group, vset_t set)
+#endif
+{
+    struct group_add_info ctx;
+    ctx.group = group;
+    ctx.set = set;
+    vset_project_minus(group_prev_tmp[group], set, group_prev_explored[group]);
+    vset_union(group_prev_explored[group], group_prev_tmp[group]);
+
+    if (log_active(infoLong)) {
+        double elem_count;
+        vset_count(group_prev_tmp[group], NULL, &elem_count);
+
+        if (elem_count >= 10000.0 * REL_PERF) {
+            Print(infoLong, "expanding group %d for %.*g states.", group, DBL_DIG, elem_count);
+        }
+    }
+
+#if SPEC_MT_SAFE
+    vrel_update(group_prev[group], group_prev_tmp[group], explore_cb_prev, &ctx);
+#else
+    vrel_update_seq(group_prev[group], group_prev_tmp[group], explore_cb_prev, &ctx);
+#endif
+    vset_clear(group_prev_tmp[group]);
+}
+
+static inline void
+expand_group_prev_projected(vrel_t rel, vset_t set, void *context)
+{
+    struct expand_info *expand_ctx = (struct expand_info*)context;
+    (*expand_ctx->eg_count)++;
+
+    vset_t group_prev_explored = expand_ctx->group_explored;
+    vset_zip(group_prev_explored, set);
+
+    struct group_add_info group_ctx;
+    int group = expand_ctx->group;
+    group_ctx.group = group;
+    group_ctx.set = NULL;
+#if SPEC_MT_SAFE
+    vrel_update(rel, set, explore_cb_prev, &group_ctx);
+#else
+    vrel_update_seq(rel, set, explore_cb_prev, &group_ctx);
+#endif
+}
+
 
 static void
 valid_end_cb(void *context, int *src)
@@ -1454,6 +1546,14 @@ stats_and_progress_report(vset_t current, vset_t visited, int level)
             sprintf(fgbuf, file, dot_dir, level, i);
             fp = fopen(fgbuf, "w+");
             vrel_dot(fp, group_next[i]);
+            fclose(fp);
+        }
+        for (int i = 0; i < nGrps; i++) {
+            file = "%s/group_prev-l%d-k%d.dot";
+            char fgbuf[snprintf(NULL, 0, file, dot_dir, level, i)];
+            sprintf(fgbuf, file, dot_dir, level, i);
+            fp = fopen(fgbuf, "w+");
+            vrel_dot(fp, group_prev[i]);
             fclose(fp);
         }
 
@@ -2252,6 +2352,17 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     struct timespec now, tmstart;
     clock_gettime(CLOCK_REALTIME, &tmstart);
 
+    // set final state
+    vset_t final = vset_create(domain, -1, NULL);
+    int *src = (int*)alloca(sizeof(int)*N);
+    GBgetFinalState(model, src);
+    vset_add(final, src);
+    Print(infoShort, "got final state");
+
+    // set final state as new initial (for now, testing)
+    //vset_copy(visited,final);
+    //vset_copy(cur0,final);
+    //vset_copy(next,final);
 
     // AL_x is the current transition set to use
     int AL_x = AL_0;
@@ -2273,14 +2384,20 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
             if ((align_groups[i] & AL_x) == 0) continue;
             if (!bitvector_is_set(reach_groups,i)) continue;
             // expand transition relations (why?)
+
+            //expand_group_prev(i, cur);
             expand_group_next(i, cur);
+
             // tmp := suc(cur,group[i])
+
+            //vset_next(tmp, cur, group_prev[i]);
             vset_next(tmp, cur, group_next[i]);
+
             // tmp := visited ⋂ tmp (only consider new states)
             vset_minus(tmp, visited);
             // next := next ⋃ tmp
             vset_union(next, tmp);
-        }
+        }// ALIGNTODO
 
         // print info and increase level
         stats_and_progress_report(next, visited, level);
@@ -2331,8 +2448,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
             AL_x = AL_0;
             vset_copy(cur0,next);
         }
-
-    } // ALIGNTODO
+    }
 
     // cleanup
     vset_destroy(cur);
@@ -3790,6 +3906,9 @@ init_domain(vset_implementation_t impl) {
     group_next     = (vrel_t*)RTmalloc(nGrps * sizeof(vrel_t));
     group_explored = (vset_t*)RTmalloc(nGrps * sizeof(vset_t));
     group_tmp      = (vset_t*)RTmalloc(nGrps * sizeof(vset_t));
+    group_prev     = (vrel_t*)RTmalloc(nGrps * sizeof(vrel_t));
+    group_prev_explored = (vset_t*)RTmalloc(nGrps * sizeof(vset_t));
+    group_prev_tmp      = (vset_t*)RTmalloc(nGrps * sizeof(vset_t));
     r_projs        = (proj_info*)RTmalloc(nGrps * sizeof(proj_info));
     w_projs        = (proj_info*)RTmalloc(nGrps * sizeof(proj_info));
 
@@ -3806,21 +3925,25 @@ init_domain(vset_implementation_t impl) {
         write_matrix = GBgetDMInfo(model);
         Warning(info, "Using GBgetTransitionsShort as next-state function");
         transitions_short = GBgetTransitionsShort;
+        transitions_prev_short = GBgetTransitionsPrevShort;
     } else if (!vdom_separates_rw(domain) && PINS_USE_GUARDS) {
         read_matrix = GBgetMatrix(model, GBgetMatrixID(model, LTSMIN_MATRIX_ACTIONS_READS));
         write_matrix = GBgetDMInfo(model);
         Warning(info, "Using GBgetActionsShort as next-state function");
         transitions_short = GBgetActionsShort;
+        transitions_prev_short = GBgetActionsPrevShort;
     } else if (vdom_separates_rw(domain) && !PINS_USE_GUARDS) {
         read_matrix = GBgetDMInfoRead(model);
         write_matrix = GBgetDMInfoMayWrite(model);
         Warning(info, "Using GBgetTransitionsShortR2W as next-state function");
         transitions_short = GBgetTransitionsShortR2W;
+        transitions_prev_short = GBgetTransitionsPrevShortR2W;
     } else { // vdom_separates_rw(domain) && PINS_USE_GUARDS
         read_matrix = GBgetMatrix(model, GBgetMatrixID(model, LTSMIN_MATRIX_ACTIONS_READS));
         write_matrix = GBgetDMInfoMayWrite(model);
         Warning(info, "Using GBgetActionsShortR2W as next-state function");
         transitions_short = GBgetActionsShortR2W;
+        transitions_prev_short = GBgetActionsPrevShortR2W;
     }
 
     if (PINS_USE_GUARDS) {
@@ -3849,12 +3972,16 @@ init_domain(vset_implementation_t impl) {
         {
             if (vdom_separates_rw(domain)) {
                 group_next[i]     = vrel_create_rw(domain,r_projs[i].len,r_projs[i].proj,w_projs[i].len,w_projs[i].proj);
+                group_prev[i]     = vrel_create_rw(domain,r_projs[i].len,r_projs[i].proj,w_projs[i].len,w_projs[i].proj);
             } else {
                 group_next[i]     = vrel_create(domain,r_projs[i].len,r_projs[i].proj);
+                group_prev[i]     = vrel_create(domain,r_projs[i].len,r_projs[i].proj);
             }
 
             group_explored[i] = vset_create(domain,r_projs[i].len,r_projs[i].proj);
             group_tmp[i]      = vset_create(domain,r_projs[i].len,r_projs[i].proj);
+            group_prev_explored[i] = vset_create(domain,r_projs[i].len,r_projs[i].proj);
+            group_prev_tmp[i]      = vset_create(domain,r_projs[i].len,r_projs[i].proj);
 
             if (inhibit_matrix != NULL) {
                 inhibit_class_count = dm_nrows(inhibit_matrix);
@@ -4914,7 +5041,9 @@ static void actual_main(void *arg)
             /* Write number of transitions and all transitions */
             fwrite(&nGrps, sizeof(int), 1, f);
             for (int i=0; i<nGrps; i++) vrel_save_proj(f, group_next[i]);
+            for (int i=0; i<nGrps; i++) vrel_save_proj(f, group_prev[i]);
             for (int i=0; i<nGrps; i++) vrel_save(f, group_next[i]);
+            for (int i=0; i<nGrps; i++) vrel_save(f, group_prev[i]);
 
             /* Write reachable states */
             int save_reachable = 1;

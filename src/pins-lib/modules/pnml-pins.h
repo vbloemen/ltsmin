@@ -44,6 +44,7 @@ typedef struct {
 
     rt_timer_t timer;
     int* init_state;
+    int* final_state;
     int has_safe_places;
 } pn_context_t;
 
