@@ -2332,6 +2332,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     // set initial state
     vset_copy(FNext, visited);
     vset_copy(FVis, visited);
+    if (trc_output != NULL) save_level(*Vis); // save initial level
 
     // set final state
     vset_t final = vset_create(domain, -1, NULL);
@@ -2350,12 +2351,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     Warning(info,"Starting T0 on DIR %s\n", dirstr[dir]);
     while (!vset_is_empty(*Next)) {
 
-        vset_copy(*Cur, *Next); // cur := next
-        vset_union(*Vis, *Cur); // vis := vis ⋃ cur
-        if (trc_output != NULL) save_level(*Vis); // save current level
-        stats_and_progress_report(*Cur, *Vis, level); // progress report
-        level ++;
-
+        vset_copy(*Cur, *Next); // Cur := Next
         // combine states from multiple T0 iterations
         vset_union(C0, *Cur);
         vset_clear(TMP); // TMP, Next := ∅
@@ -2378,6 +2374,11 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
             vset_union(*Next, TMP); // Next := Next ⋃ TMP
         }
 
+        // add to visited set
+        vset_union(*Vis, *Next); // Vis := Vis ⋃ Next
+        if (trc_output != NULL) save_level(*Vis); // save current level
+        stats_and_progress_report(*Cur, *Vis, level); // progress report
+
         // CSV (dir,Tx,level,time,next_states,next_nodes,vis_states,vis_nodes)
         if (REPORT_STATS) {
             printf("%s,",dirstr[dir]); // dir
@@ -2388,7 +2389,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
             // timing info
             clock_gettime(CLOCK_REALTIME, &now);
             double seconds = (double)((now.tv_sec+now.tv_nsec*1e-9)
-                           -(double)(tmstart.tv_sec+tmstart.tv_nsec*1e-9));
+                           - (double)(tmstart.tv_sec+tmstart.tv_nsec*1e-9));
             printf(",%f", seconds);
             clock_gettime(CLOCK_REALTIME, &tmstart);
             // states
@@ -2403,13 +2404,18 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
         }
 
         // return condition
-        if (align_variant == AL_LOCKSTEP || align_variant == AL_INV_STATE ||
-            align_variant == AL_LOCKSTEP_SMALLEST) {
+        if (align_variant == AL_DOUBLE || align_variant == AL_INV_STATE ||
+            align_variant == AL_DOUBLE_SMALLEST) {
             vset_copy(TMP, FVis);
             vset_intersect(TMP, BVis);
             if (!vset_is_empty(TMP)) {
                 Warning(info, "Found FVis ⋂ BVis ≠ ∅ (TODO: trace)");
                 // TODO: trace construction
+                break;
+            }
+        } else if (align_variant == AL_DOUBLE_ALL) {
+            if (vset_equal(FVis, BVis)) {
+                Warning(info, "Found equal forward and backward visited set");
                 break;
             }
         } else if (align_variant == AL_INV) check_invariants(*Next, level);
@@ -2420,9 +2426,9 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
             else first = false; // only perform T0 step at the begin
             vset_copy(*Next, C0); // Next := C0
             vset_clear(C0);
-            if (align_variant == AL_LOCKSTEP
-                || align_variant == AL_LOCKSTEP_SMALLEST) {
-                if (align_variant == AL_LOCKSTEP_SMALLEST) {
+            if (align_variant == AL_DOUBLE
+                || align_variant == AL_DOUBLE_SMALLEST) {
+                if (align_variant == AL_DOUBLE_SMALLEST) {
                     long Fn_count, Bn_count;
                     vset_count_fn(FVis, &Fn_count, NULL);
                     vset_count_fn(BVis, &Bn_count, NULL);
@@ -2447,6 +2453,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
             Tx = T0;
             Warning(info,"Starting T0 on dir %s\n", dirstr[dir]);
         }
+        level ++;
     }
     // cleanup
     vset_destroy(FCur);
