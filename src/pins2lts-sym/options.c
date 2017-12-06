@@ -20,6 +20,8 @@ sat_strategy_t sat_strategy = NO_SAT;
 
 guide_strategy_t guide_strategy = UNGUIDED;
 
+al_variant_t align_variant = AL_INV;
+
 char** ctl_star_formulas = NULL;
 char** ctl_formulas = NULL;
 char** ltl_formulas = NULL;
@@ -89,6 +91,15 @@ static si_map_entry SATURATION[] = {
     {NULL, 0}
 };
 
+static char* al_variant = "inv";
+static si_map_entry ALIGN_VARIANT[] = {
+    {"inv", AL_INV},
+    {"inv-state", AL_INV_STATE},
+    {"lockstep", AL_LOCKSTEP},
+    {"lockstep-smallest", AL_LOCKSTEP_SMALLEST},
+    {NULL, 0}
+};
+
 static char *guidance = "unguided";
 static si_map_entry GUIDED[] = {
     {"unguided", UNGUIDED},
@@ -141,6 +152,15 @@ reach_popt(poptContext con, enum poptCallbackReason reason,
             Warning(info, "Guided search strategy is %s", guidance);
         }
         guide_strategy = res;
+
+        res = linear_search(ALIGN_VARIANT, al_variant);
+        if (res < 0) {
+            Warning(error, "unknown alignment variant %s", al_variant);
+            HREexitUsage(LTSMIN_EXIT_FAILURE);
+        } else if (HREme(HREglobal())==0) {
+            Warning(info, "Alignment variant is %s", al_variant);
+        }
+        align_variant = res;
 
         if (trc_output != NULL && !dlk_detect && act_detect == NULL && HREme(HREglobal())==0)
             Warning(info, "Ignoring trace output");
@@ -212,6 +232,7 @@ struct poptOption options[] = {
     { "saturation" , 0, POPT_ARG_STRING|POPT_ARGFLAG_SHOW_DEFAULT , &saturation , 0 , "select the saturation strategy" , "<none|sat-like|sat-loop|sat-fix|sat>" },
     { "sat-granularity" , 0 , POPT_ARG_INT|POPT_ARGFLAG_SHOW_DEFAULT, &sat_granularity , 0 , "set saturation granularity","<number>" },
     { "save-sat-levels", 0, POPT_ARG_VAL, &save_sat_levels, 1, "save previous states seen at saturation levels", NULL },
+    { "align-variant" , 0 , POPT_ARG_STRING|POPT_ARGFLAG_SHOW_DEFAULT, &al_variant , 0 , "Set alignment variant","<inv|inv-state|lockstep|lockstep-smallest>" },
     { "guidance", 0 , POPT_ARG_STRING|POPT_ARGFLAG_SHOW_DEFAULT , &guidance, 0 , "select the guided search strategy" , "<unguided|directed>" },
     { "deadlock" , 'd' , POPT_ARG_VAL , &dlk_detect , 1 , "detect deadlocks" , NULL },
     { "action" , 0 , POPT_ARG_STRING , &act_detect , 0 , "detect action prefix" , "<action prefix>" },

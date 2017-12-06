@@ -35,6 +35,10 @@ typedef enum { UNGUIDED, DIRECTED } guide_strategy_t;
 
 extern guide_strategy_t guide_strategy;
 
+typedef enum { AL_INV, AL_INV_STATE, AL_LOCKSTEP, AL_LOCKSTEP_SMALLEST } al_variant_t;
+
+extern al_variant_t align_variant;
+
 extern char** ctl_star_formulas;
 extern char** ctl_formulas;
 extern char** ltl_formulas;

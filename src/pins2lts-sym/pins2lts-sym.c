@@ -2260,18 +2260,6 @@ reach_bfs(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     (void)visited_old;
 }
 
-static void print_states(void *context, int *src)
-{
-    Warning(info, " print states: %p %p", context, src);
-
-    /*output_context* ctx = (output_context*)context;
-
-    ctx->src = src;
-    GBgetTransitionsShort(model, ctx->group, ctx->src, etf_edge, context);
-    */
-}
-
-
 
 // alignments
 static void
@@ -2279,26 +2267,29 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
                    long *eg_count, long *next_count, long *guard_count)
 {
     (void) visited_old; (void) eg_count; (void) next_count; (void) guard_count; 
-    Warning(info, "Mapping groups to transitions");
 
+    Warning(info, "Mapping groups to transitions");
     // constants
-    const int AL_LOG   = 1;
-    const int AL_MODEL = 2;
-    const int AL_SYNC  = 4;
-    const int AL_TAU   = 8;
-    const int AL_NONE  = 16;
+    const bool REPORT_STATS = true;
+    const int T_LOG   = 1;
+    const int T_MODEL = 2;
+    const int T_SYNC  = 4;
+    const int T_TAU   = 8;
+    const int T_NONE  = 16;
+    const int DIR_FWD = 0;
+    const int DIR_BWD = 1;
+    const char *dirstr[2] = {"FWD", "BWD"};
+    const char *align_acts[4] = {"LOG", "MODEL", "SYNC", "TAU"};
+    const int   align_ids[4]  = {T_LOG, T_MODEL, T_SYNC, T_TAU};
 
     // cost function
-    int AL_0 = AL_TAU | AL_SYNC;
-    int AL_1 = AL_MODEL | AL_LOG;
+    int T0 = T_TAU | T_SYNC;
+    int T1 = T_MODEL | T_LOG;
 
-    // Figure out which actions belong to which group, and store these in
-    // align_groups
-    char *align_acts[4] = {"LOG", "MODEL", "SYNC", "TAU"};
-    int   align_ids[4]  = {AL_LOG, AL_MODEL, AL_SYNC, AL_TAU};
+    // Search which actions are in which group, and store these in align_groups
     int  *align_groups  = RTmalloc(nGrps * sizeof(int));
     for (int i=0; i<nGrps; i++) {
-        align_groups[i] = AL_NONE;
+        align_groups[i] = T_NONE;
     }
     // searches for the different actions and stores in align_groups
     for (int word=0; word<4; word++) {
@@ -2311,46 +2302,36 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
                 Warning(infoLong, "Found \"%s\" potentially in group %d",
                         align_acts[word], groups[group]);
                 // check if there is overlap in the groups
-                HREassert(align_groups[groups[group]] == AL_NONE,
-                        "Transition occurs in multiple groups");
+                HREassert(align_groups[groups[group]] == T_NONE,
+                        "Multiple transitions in one group");
                 align_groups[groups[group]] = align_ids[word];
             }
         } else Warning(infoLong,
                 "No group will ever produce action \"%s\"", align_acts[word]);
     }
 
-    bool print_al_groups = false;
-    if (print_al_groups) {
-        printf("align groups: [");
-        for (int i=0; i<nGrps; i++) {
-            printf(" %d:",i);
-            if (align_groups[i] == AL_LOG) printf("LOG");
-            else if (align_groups[i] == AL_MODEL) printf("MODEL");
-            else if (align_groups[i] == AL_SYNC) printf("SYNC");
-            else if (align_groups[i] == AL_TAU) printf("TAU");
-            else if (align_groups[i] == AL_NONE) printf("NONE");
-            else printf("???");
-        }
-        printf(" ]\n");
-    }
+    // setup for the search
+    int level    = 0;
+    bool first   = true;
+    vset_t FCur  = vset_create(domain, -1, NULL);
+    vset_t FNext = vset_create(domain, -1, NULL);
+    vset_t FVis  = vset_create(domain, -1, NULL);
+    vset_t BCur  = vset_create(domain, -1, NULL);
+    vset_t BNext = vset_create(domain, -1, NULL);
+    vset_t BVis  = vset_create(domain, -1, NULL);
 
-    Warning(info, "Performing the uniform-cost shortest path search");
+    int Tx       = T0; // Tx is the current transition set to use
+    vset_t *Cur  = &FCur;
+    vset_t *Next = &FNext;
+    vset_t *Vis  = &FVis;
+    // C0 = set of states in multiple iterations of T0
+    vset_t C0    = vset_create(domain, -1, NULL);
+    vset_t TMP   = vset_create(domain, -1, NULL);
+    int    dir   = DIR_FWD;
 
-    // search procedure
-    int level = 0;
-    vset_t cur  = vset_create(domain, -1, NULL);
-    vset_t cur0  = vset_create(domain, -1, NULL);
-    vset_t next = vset_create(domain, -1, NULL);
-    vset_t tmp = vset_create(domain, -1, NULL);
-    vset_copy(next, visited);
-    vset_copy(cur0, visited);
-
-    LACE_ME;
-
-    bool REPORT_STATS = true;
-    //clock_t start = clock(), diff;
-    struct timespec now, tmstart;
-    clock_gettime(CLOCK_REALTIME, &tmstart);
+    // set initial state
+    vset_copy(FNext, visited);
+    vset_copy(FVis, visited);
 
     // set final state
     vset_t final = vset_create(domain, -1, NULL);
@@ -2358,102 +2339,124 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     GBgetFinalState(model, src);
     vset_add(final, src);
     Print(infoShort, "got final state");
+    vset_copy(BVis, final);
+    vset_copy(BNext, final);
 
-    // set final state as new initial (for now, testing)
-    //vset_copy(visited,final);
-    //vset_copy(cur0,final);
-    //vset_copy(next,final);
+    // run the algorithm
+    Warning(info, "Performing the uniform-cost shortest path search");
+    LACE_ME;
+    struct timespec now, tmstart; // timing info
+    clock_gettime(CLOCK_REALTIME, &tmstart);
+    Warning(info,"Starting T0 on DIR %s\n", dirstr[dir]);
+    while (!vset_is_empty(*Next)) {
 
-    // AL_x is the current transition set to use
-    int AL_x = AL_0;
-    Warning(info,"Starting AL_0\n");
-    while (!vset_is_empty(next)) {
-        // cur := next
-        vset_copy(cur, next);
-        // vis := vis ⋃ cur
-        vset_union(visited, cur);
-        // save the current level
-        if (trc_output != NULL) save_level(visited);
-        // tmp := ∅
-        vset_clear(tmp);
-        vset_clear(next);
-
-        // next state for all groups ( next := suc(cur) )
-        for (int i = 0; i < nGrps; i++) {
-            // Filter moves to only take AL_x transitions
-            if ((align_groups[i] & AL_x) == 0) continue;
-            if (!bitvector_is_set(reach_groups,i)) continue;
-            // expand transition relations (why?)
-
-            //expand_group_prev(i, cur);
-            expand_group_next(i, cur);
-
-            // tmp := suc(cur,group[i])
-
-            //vset_next(tmp, cur, group_prev[i]);
-            vset_next(tmp, cur, group_next[i]);
-
-            // tmp := visited ⋂ tmp (only consider new states)
-            vset_minus(tmp, visited);
-            // next := next ⋃ tmp
-            vset_union(next, tmp);
-        }// ALIGNTODO
-
-        // print info and increase level
-        stats_and_progress_report(next, visited, level);
+        vset_copy(*Cur, *Next); // cur := next
+        vset_union(*Vis, *Cur); // vis := vis ⋃ cur
+        if (trc_output != NULL) save_level(*Vis); // save current level
+        stats_and_progress_report(*Cur, *Vis, level); // progress report
         level ++;
 
-        if (AL_x == AL_0) vset_union(cur0, next);
+        // combine states from multiple T0 iterations
+        vset_union(C0, *Cur);
+        vset_clear(TMP); // TMP, Next := ∅
+        vset_clear(*Next);
 
-        // print statistics (AL_x, level, time_ms, states_cur, states_vis)
+        // next state for all groups ( Next := suc(cur) )
+        for (int i = 0; i < nGrps; i++) {
+            // Filter moves to only take Tx transitions
+            if ((align_groups[i] & Tx) == 0) continue;
+            if (!bitvector_is_set(reach_groups,i)) continue;
+            // expand transition relations, TMP := suc(Cur,dir,group[i])
+            if (dir == DIR_FWD) {
+                expand_group_next(i, *Cur);
+                vset_next(TMP, *Cur, group_next[i]);
+            } else if (dir == DIR_BWD) {
+                expand_group_prev(i, *Cur);
+                vset_next(TMP, *Cur, group_prev[i]);
+            }
+            vset_minus(TMP, *Vis); // TMP := TMP \ Vis
+            vset_union(*Next, TMP); // Next := Next ⋃ TMP
+        }
+
+        // CSV (dir,Tx,level,time,next_states,next_nodes,vis_states,vis_nodes)
         if (REPORT_STATS) {
-            if (AL_x == AL_0)  printf("AL_0");
-            else if (AL_x == AL_1)  printf("AL_1");
-
+            printf("%s,",dirstr[dir]); // dir
+            if (Tx == T0)  printf("T0"); // Tx
+            else if (Tx == T1)  printf("T1");
             // level
             printf(",%d",level);
-
             // timing info
             clock_gettime(CLOCK_REALTIME, &now);
             double seconds = (double)((now.tv_sec+now.tv_nsec*1e-9)
-                           - (double)(tmstart.tv_sec+tmstart.tv_nsec*1e-9));
-            //diff = clock() - start;
-            //int msec = diff * 1000 / CLOCKS_PER_SEC;
-            printf(",%f", seconds);//d.%d",msec/1000,msec%1000);
-            //start = clock();
+                           -(double)(tmstart.tv_sec+tmstart.tv_nsec*1e-9));
+            printf(",%f", seconds);
             clock_gettime(CLOCK_REALTIME, &tmstart);
-
             // states
             long n_count;
             long double e_count;
-            if (next != NULL) {
-                int digs = vset_count_fn(next, &n_count, &e_count);
-                printf(",%.*Lg",digs,e_count);
+            if (*Next != NULL) {
+                int digs = vset_count_fn(*Next, &n_count, &e_count);
+                printf(",%.*Lg,%lu",digs, e_count, n_count);
             } else printf(",0");
-            int digs = vset_count_fn (visited, &n_count, &e_count);
-            printf(",%.*Lg", digs, e_count);
-            printf("\n");
+            int digs = vset_count_fn (*Vis, &n_count, &e_count);
+            printf(",%.*Lg,%lu\n", digs, e_count, n_count);
         }
 
-        // check invariant
-        if (sat_strategy == NO_SAT) check_invariants(next, level);
+        // return condition
+        if (align_variant == AL_LOCKSTEP || align_variant == AL_INV_STATE ||
+            align_variant == AL_LOCKSTEP_SMALLEST) {
+            vset_copy(TMP, FVis);
+            vset_intersect(TMP, BVis);
+            if (!vset_is_empty(TMP)) {
+                Warning(info, "Found FVis ⋂ BVis ≠ ∅ (TODO: trace)");
+                // TODO: trace construction
+                break;
+            }
+        } else if (align_variant == AL_INV) check_invariants(*Next, level);
 
-        // possibly switch between AL_0 and AL_1
-        if (vset_is_empty(next) && AL_x == AL_0) {
-            Warning(info,"Starting AL_1\n");
-            AL_x = AL_1;
-            vset_copy(next, cur0);
-        } else if (AL_x == AL_1) {
-            Warning(info,"Starting AL_0\n");
-            AL_x = AL_0;
-            vset_copy(cur0,next);
+        // (possibly) switch between T0 and T1
+        if (vset_is_empty(*Next) && Tx == T0) {
+            if (!first) Tx = T1; // switch to a T1 step
+            else first = false; // only perform T0 step at the begin
+            vset_copy(*Next, C0); // Next := C0
+            vset_clear(C0);
+            if (align_variant == AL_LOCKSTEP
+                || align_variant == AL_LOCKSTEP_SMALLEST) {
+                if (align_variant == AL_LOCKSTEP_SMALLEST) {
+                    long Fn_count, Bn_count;
+                    vset_count_fn(FVis, &Fn_count, NULL);
+                    vset_count_fn(BVis, &Bn_count, NULL);
+                    // dir will be inverted, so set to opposite
+                    if (Fn_count > Bn_count) dir = DIR_FWD;
+                    else dir = DIR_BWD;
+                }
+                if (dir == DIR_FWD) {
+                    Cur  = &BCur;
+                    Next = &BNext;
+                    Vis  = &BVis;
+                    dir  = DIR_BWD;
+                } else if (dir == DIR_BWD) {
+                    Cur  = &FCur;
+                    Next = &FNext;
+                    Vis  = &FVis;
+                    dir  = DIR_FWD;
+                }
+            }
+            Warning(info,"Starting T1 on dir %s\n", dirstr[dir]);
+        } else if (Tx == T1) {
+            Tx = T0;
+            Warning(info,"Starting T0 on dir %s\n", dirstr[dir]);
         }
     }
-
     // cleanup
-    vset_destroy(cur);
-    vset_destroy(next);
-    vset_destroy(tmp);
+    vset_destroy(FCur);
+    vset_destroy(FNext);
+    vset_destroy(FVis);
+    vset_destroy(BCur);
+    vset_destroy(BNext);
+    vset_destroy(BVis);
+    vset_destroy(C0);
+    vset_destroy(TMP);
 
     Warning(info, "Finished exploring\n");
 }
