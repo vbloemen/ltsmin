@@ -2261,16 +2261,38 @@ reach_bfs(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
 }
 
 
+// alignment report statistics
+static inline void
+aling_report (char* type, const char* dir, char* Tx, int level, int misc,
+        struct timespec *t1, struct timespec *t2)
+{
+    clock_gettime(CLOCK_REALTIME, t1); // get current time
+    double seconds = (double)((t1->tv_sec+t1->tv_nsec*1e-9)
+                   - (double)(t2->tv_sec+t2->tv_nsec*1e-9));
+    printf("%s,%s,%s,%d,%f,%d\n", type, dir, Tx, level, seconds, misc);
+    clock_gettime(CLOCK_REALTIME, t2); // start t2
+}
+
+
 // alignments
 static void
 align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
                    long *eg_count, long *next_count, long *guard_count)
 {
     (void) visited_old; (void) eg_count; (void) next_count; (void) guard_count; 
+    // timing info
+    struct timespec t1_nodereport, t2_nodereport;
+    struct timespec t1_onegroup, t2_onegroup;
+    struct timespec t1_block, t2_block;
+    const int REPORT_NODES = 1;
+    const int REPORT_BLOCK = 2;
+    const int REPORT_ONEGR = 4;
+    const int REPORT_STATS = (REPORT_NODES);
+    int prevTx, prevDir; // for switch block
+    clock_gettime(CLOCK_REALTIME, &t2_block);
 
     Warning(info, "Mapping groups to transitions");
     // constants
-    const bool REPORT_STATS = true;
     const int T_LOG   = 1;
     const int T_MODEL = 2;
     const int T_SYNC  = 4;
@@ -2284,7 +2306,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
 
     // cost function
     int T0 = T_TAU | T_SYNC;
-    int T1 = T_MODEL | T_LOG;
+    int T1 = T_LOG | T_MODEL;
 
     // Search which actions are in which group, and store these in align_groups
     int  *align_groups  = RTmalloc(nGrps * sizeof(int));
@@ -2324,8 +2346,8 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     vset_t *Cur  = &FCur;
     vset_t *Next = &FNext;
     vset_t *Vis  = &FVis;
-    // C0 = set of states in multiple iterations of T0
-    vset_t C0    = vset_create(domain, -1, NULL);
+    // L0 = set of states in multiple iterations of T0
+    vset_t L0    = vset_create(domain, -1, NULL);
     vset_t TMP   = vset_create(domain, -1, NULL);
     int    dir   = DIR_FWD;
 
@@ -2346,16 +2368,20 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     // run the algorithm
     Warning(info, "Performing the uniform-cost shortest path search");
     LACE_ME;
-    struct timespec now, tmstart; // timing info
-    clock_gettime(CLOCK_REALTIME, &tmstart);
+    clock_gettime(CLOCK_REALTIME, &t2_nodereport);
+    if (REPORT_STATS & REPORT_BLOCK) aling_report("setup", dirstr[dir],
+            ((Tx==T0)?"T0":"T1"), level, 0, &t1_block, &t2_block);
     Warning(info,"Starting T0 on DIR %s\n", dirstr[dir]);
     while (!vset_is_empty(*Next)) {
 
         vset_copy(*Cur, *Next); // Cur := Next
         // combine states from multiple T0 iterations
-        vset_union(C0, *Cur);
+        vset_union(L0, *Cur);
         vset_clear(TMP); // TMP, Next := ∅
         vset_clear(*Next);
+
+        if (REPORT_STATS & REPORT_BLOCK) aling_report("curnext", dirstr[dir],
+                ((Tx==T0)?"T0":"T1"), level, 0, &t1_block, &t2_block);
 
         // next state for all groups ( Next := suc(cur) )
         for (int i = 0; i < nGrps; i++) {
@@ -2363,6 +2389,8 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
             if ((align_groups[i] & Tx) == 0) continue;
             if (!bitvector_is_set(reach_groups,i)) continue;
             // expand transition relations, TMP := suc(Cur,dir,group[i])
+            if (REPORT_STATS & REPORT_ONEGR)
+                clock_gettime(CLOCK_REALTIME, &t2_onegroup);
             if (dir == DIR_FWD) {
                 expand_group_next(i, *Cur);
                 vset_next(TMP, *Cur, group_next[i]);
@@ -2370,28 +2398,44 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
                 expand_group_prev(i, *Cur);
                 vset_next(TMP, *Cur, group_prev[i]);
             }
+            if (REPORT_STATS & REPORT_ONEGR) aling_report("next", dirstr[dir],
+                ((Tx==T0)?"T0":"T1"), level, i, &t1_onegroup, &t2_onegroup);
+
             vset_minus(TMP, *Vis); // TMP := TMP \ Vis
+
+            if (REPORT_STATS & REPORT_ONEGR) aling_report("tmpvis",dirstr[dir],
+                ((Tx==T0)?"T0":"T1"), level, i, &t1_onegroup, &t2_onegroup);
+
             vset_union(*Next, TMP); // Next := Next ⋃ TMP
+
+            if (REPORT_STATS & REPORT_ONEGR) aling_report("addtmp",dirstr[dir],
+                ((Tx==T0)?"T0":"T1"), level, i, &t1_onegroup, &t2_onegroup);
         }
+        if (REPORT_STATS & REPORT_BLOCK) aling_report("allnext", dirstr[dir],
+                ((Tx==T0)?"T0":"T1"), level, 0, &t1_block, &t2_block);
 
         // add to visited set
         vset_union(*Vis, *Next); // Vis := Vis ⋃ Next
         if (trc_output != NULL) save_level(*Vis); // save current level
-        stats_and_progress_report(*Cur, *Vis, level); // progress report
 
-        // CSV (dir,Tx,level,time,next_states,next_nodes,vis_states,vis_nodes)
-        if (REPORT_STATS) {
-            printf("%s,",dirstr[dir]); // dir
+        if (REPORT_STATS & REPORT_BLOCK) aling_report("visadd", dirstr[dir],
+                ((Tx==T0)?"T0":"T1"), level, 0, &t1_block, &t2_block);
+
+        stats_and_progress_report(*Cur, *Vis, level); // progress report
+        // (type,dir,Tx,level,time,next_states,next_nodes,vis_states,vis_nodes)
+        if (REPORT_STATS & REPORT_NODES) {
+            // stop clock
+            clock_gettime(CLOCK_REALTIME, &t1_nodereport);
+            printf("nodereport,%s,",dirstr[dir]); // dir
             if (Tx == T0)  printf("T0"); // Tx
             else if (Tx == T1)  printf("T1");
             // level
             printf(",%d",level);
             // timing info
-            clock_gettime(CLOCK_REALTIME, &now);
-            double seconds = (double)((now.tv_sec+now.tv_nsec*1e-9)
-                           - (double)(tmstart.tv_sec+tmstart.tv_nsec*1e-9));
+            double seconds =
+                (double)((t1_nodereport.tv_sec + t1_nodereport.tv_nsec*1e-9)
+              - (double)(t2_nodereport.tv_sec + t2_nodereport.tv_nsec*1e-9));
             printf(",%f", seconds);
-            clock_gettime(CLOCK_REALTIME, &tmstart);
             // states
             long n_count;
             long double e_count;
@@ -2401,32 +2445,39 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
             } else printf(",0");
             int digs = vset_count_fn (*Vis, &n_count, &e_count);
             printf(",%.*Lg,%lu\n", digs, e_count, n_count);
+            // start clock (don't meassure reporting stats)
+            clock_gettime(CLOCK_REALTIME, &t2_nodereport);
         }
+        if (REPORT_STATS & REPORT_BLOCK) aling_report("stats", dirstr[dir],
+                ((Tx==T0)?"T0":"T1"), level, 0, &t1_block, &t2_block);
 
         // return condition
-        if (align_variant == AL_DOUBLE || align_variant == AL_INV_STATE ||
-            align_variant == AL_DOUBLE_SMALLEST) {
-            vset_copy(TMP, FVis);
-            vset_intersect(TMP, BVis);
+        if (align_variant == AL_DOUBLE || align_variant == AL_FWD ||
+                align_variant == AL_DOUBLE_SMALLEST) {
+            vset_copy(TMP, *Next);
+            // TODO: only check with BNext?
+            if (dir == DIR_FWD) vset_intersect(TMP, BVis);
+            else if (dir == DIR_BWD) vset_intersect(TMP, FVis);
             if (!vset_is_empty(TMP)) {
-                Warning(info, "Found FVis ⋂ BVis ≠ ∅ (TODO: trace)");
+                Warning(info, "Found-alignment");
                 // TODO: trace construction
-                break;
-            }
-        } else if (align_variant == AL_DOUBLE_ALL) {
-            if (vset_equal(FVis, BVis)) {
-                Warning(info, "Found equal forward and backward visited set");
                 break;
             }
         } else if (align_variant == AL_INV) check_invariants(*Next, level);
 
+        if (REPORT_STATS & REPORT_BLOCK) {
+            aling_report("return", dirstr[dir],
+                ((Tx==T0)?"T0":"T1"), level, 0, &t1_block, &t2_block);
+            prevDir = dir;
+            prevTx = Tx;
+        }
         // (possibly) switch between T0 and T1
         if (vset_is_empty(*Next) && Tx == T0) {
             if (!first) Tx = T1; // switch to a T1 step
             else first = false; // only perform T0 step at the begin
-            vset_copy(*Next, C0); // Next := C0
-            vset_clear(C0);
-            if (align_variant == AL_DOUBLE
+            vset_copy(*Next, L0); // Next := L0
+            vset_clear(L0);
+            if (align_variant == AL_DOUBLE || align_variant == AL_DOUBLE_ALL
                 || align_variant == AL_DOUBLE_SMALLEST) {
                 if (align_variant == AL_DOUBLE_SMALLEST) {
                     long Fn_count, Bn_count;
@@ -2453,6 +2504,9 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
             Tx = T0;
             Warning(info,"Starting T0 on dir %s\n", dirstr[dir]);
         }
+        if (REPORT_STATS & REPORT_BLOCK) aling_report("switch",
+                dirstr[prevDir], ((prevTx==T0)?"T0":"T1"), level, 0, &t1_block,
+                &t2_block);
         level ++;
     }
     // cleanup
@@ -2462,7 +2516,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     vset_destroy(BCur);
     vset_destroy(BNext);
     vset_destroy(BVis);
-    vset_destroy(C0);
+    vset_destroy(L0);
     vset_destroy(TMP);
 
     Warning(info, "Finished exploring\n");

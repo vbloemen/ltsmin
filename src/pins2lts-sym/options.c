@@ -94,7 +94,7 @@ static si_map_entry SATURATION[] = {
 static char* al_variant = "inv";
 static si_map_entry ALIGN_VARIANT[] = {
     {"inv", AL_INV},
-    {"inv-state", AL_INV_STATE},
+    {"fwd", AL_FWD},
     {"inv-all", AL_INV_ALL},
     {"double", AL_DOUBLE},
     {"double-smallest", AL_DOUBLE_SMALLEST},
@@ -234,7 +234,7 @@ struct poptOption options[] = {
     { "saturation" , 0, POPT_ARG_STRING|POPT_ARGFLAG_SHOW_DEFAULT , &saturation , 0 , "select the saturation strategy" , "<none|sat-like|sat-loop|sat-fix|sat>" },
     { "sat-granularity" , 0 , POPT_ARG_INT|POPT_ARGFLAG_SHOW_DEFAULT, &sat_granularity , 0 , "set saturation granularity","<number>" },
     { "save-sat-levels", 0, POPT_ARG_VAL, &save_sat_levels, 1, "save previous states seen at saturation levels", NULL },
-    { "align-variant" , 0 , POPT_ARG_STRING|POPT_ARGFLAG_SHOW_DEFAULT, &al_variant , 0 , "Set alignment variant","<inv|inv-state|inv-all|double|double-smallest|double-all>" },
+    { "align-variant" , 0 , POPT_ARG_STRING|POPT_ARGFLAG_SHOW_DEFAULT, &al_variant , 0 , "Set alignment variant","<inv|fwd|inv-all|double|double-smallest|double-all>" },
     { "guidance", 0 , POPT_ARG_STRING|POPT_ARGFLAG_SHOW_DEFAULT , &guidance, 0 , "select the guided search strategy" , "<unguided|directed>" },
     { "deadlock" , 'd' , POPT_ARG_VAL , &dlk_detect , 1 , "detect deadlocks" , NULL },
     { "action" , 0 , POPT_ARG_STRING , &act_detect , 0 , "detect action prefix" , "<action prefix>" },
