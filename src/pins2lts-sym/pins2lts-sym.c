@@ -339,6 +339,7 @@ find_trace_to(int trace_end[][N], int end_count, int level, vset_t *levels,
     while (prev_level >= 0) {
         int int_level = 0;
 
+
         if (vset_member(levels[prev_level], states[current_state - 1])) {
             Warning(debug, "Skipping level %d in trace generation", prev_level);
             prev_level--;
@@ -500,7 +501,7 @@ static void eval_cb (vset_t set, void *context, int *src)
 #define eval_label(l, s) CALL(eval_label, (l), (s))
 VOID_TASK_2(eval_label, int, label, vset_t, set)
 #else
-static void eval_label(int label, vset_t set)    
+static void eval_label(int label, vset_t set)
 #endif
 {
     // get the short vectors we need to evaluate
@@ -622,9 +623,9 @@ struct inv_rel_s {
 static void
 inv_rel_destroy(void* context)
 {
-    struct inv_info_s* info = (struct inv_info_s*) context;    
+    struct inv_info_s* info = (struct inv_info_s*) context;
     struct inv_rel_s* rel = (struct inv_rel_s*) info->work;
-    
+
     vset_destroy(rel->tmp);
     vset_destroy(rel->true_states);
     vset_destroy(rel->false_states);
@@ -636,7 +637,7 @@ static void
 inv_svar_destroy(void* context)
 {
     struct inv_info_s* info = (struct inv_info_s*) context;
-    
+
     if (info->work != NULL) vset_destroy((vset_t) info->work);
     inv_info_destroy(info);
 }
@@ -668,7 +669,7 @@ VOID_TASK_3(eval_predicate_set_par, ltsmin_expr_t, e, ltsmin_parse_env_t, env, v
     left = right = NULL;
     if (e->node_type == UNARY_OP || e->node_type == BINARY_OP) left = (struct inv_info_s*) e->arg1->context;
     if (e->node_type == BINARY_OP) right = (struct inv_info_s*) e->arg2->context;
-    
+
     switch (e->token) {
         case PRED_TRUE: {
             // do nothing (c->container already contains everything)
@@ -688,7 +689,7 @@ VOID_TASK_3(eval_predicate_set_par, ltsmin_expr_t, e, ltsmin_parse_env_t, env, v
             vset_copy(left->container, c->container);
             eval_predicate_set_par(e->arg1, env, states);
             vset_minus(c->container, left->container);
-            vset_clear(left->container);            
+            vset_clear(left->container);
         } break;
         case PRED_AND: {
             vset_copy(left->container, c->container);
@@ -722,10 +723,10 @@ VOID_TASK_3(eval_predicate_set_par, ltsmin_expr_t, e, ltsmin_parse_env_t, env, v
         case PRED_GT:
         case PRED_GEQ: {
             struct inv_rel_s* rel = (struct inv_rel_s*) c->work;
-            
+
             vset_project_minus(rel->tmp, states, rel->true_states);
             vset_minus(rel->tmp, rel->false_states);
-            
+
             struct rel_expr_info ctx;
             ctx.vec = rel->vec;
 
@@ -734,7 +735,7 @@ VOID_TASK_3(eval_predicate_set_par, ltsmin_expr_t, e, ltsmin_parse_env_t, env, v
 
             ctx.e = e;
             ctx.env = env;
-            
+
             // count when verbose
             if (log_active(infoLong)) {
                 double elem_count;
@@ -768,7 +769,7 @@ eval_predicate_set(ltsmin_expr_t e, ltsmin_parse_env_t env, vset_t states)
     left = right = NULL;
     if (e->node_type == UNARY_OP || e->node_type == BINARY_OP) left = (struct inv_info_s*) e->arg1->context;
     if (e->node_type == BINARY_OP) right = (struct inv_info_s*) e->arg2->context;
-    
+
     switch (e->token) {
         case PRED_TRUE: {
             // do nothing (c->container already contains everything)
@@ -844,11 +845,11 @@ eval_predicate_set(ltsmin_expr_t e, ltsmin_parse_env_t env, vset_t states)
 
             // this join is necessary because we can not project an already projected vset.
             vset_join(rel->shortcut, states, c->container);
-            
+
             vset_project_minus(rel->tmp, rel->shortcut, rel->true_states);
             vset_clear(rel->shortcut);
             vset_minus(rel->tmp, rel->false_states);
-            
+
             struct rel_expr_info ctx;
             ctx.vec = rel->vec;
 
@@ -857,7 +858,7 @@ eval_predicate_set(ltsmin_expr_t e, ltsmin_parse_env_t env, vset_t states)
 
             ctx.e = e;
             ctx.env = env;
-            
+
             // count when verbose
             if (log_active(infoLong)) {
                 double elem_count;
@@ -883,7 +884,7 @@ eval_predicate_set(ltsmin_expr_t e, ltsmin_parse_env_t env, vset_t states)
 
 static inline void
 inv_cleanup()
-{    
+{
     bitvector_clear(&state_label_used);
 
     int n_violated = 0;
@@ -892,7 +893,7 @@ inv_cleanup()
             bitvector_union(&state_label_used, &inv_sl_deps[i]);
         } else n_violated++;
     }
-    
+
     if (n_violated == num_inv) RTfree(inv_detect);
 
     if (PINS_USE_GUARDS) {
@@ -1483,7 +1484,7 @@ stats_and_progress_report(vset_t current, vset_t visited, int level)
 {
     long   n_count;
     long double e_count;
-    
+
     if (sat_strategy == NO_SAT || log_active (infoLong)) {
         Print(infoShort, "level %d is finished", level);
     }
@@ -1518,9 +1519,9 @@ stats_and_progress_report(vset_t current, vset_t visited, int level)
             }
         }
     }
-    
+
     if (dot_dir != NULL) {
-        
+
         FILE *fp;
         char *file;
 
@@ -1572,7 +1573,7 @@ stats_and_progress_report(vset_t current, vset_t visited, int level)
             vset_dot(fp, label_true[g]);
             fclose(fp);
         }
-    }    
+    }
 }
 
 static void
@@ -2261,6 +2262,190 @@ reach_bfs(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
 }
 
 
+static void
+write_align_trace(lts_file_t trace_handle, int **states, int total_states,
+        int centerpoint)
+{
+    // output starting from initial state, which is in states[total_states-1]
+    for(int i = 1; i<centerpoint; i++) {
+        write_trace_state(trace_handle, i-1, states[centerpoint-i]);
+        write_trace_step(trace_handle, i-1, states[centerpoint-i], i, states[centerpoint-i-1]);
+    }
+    write_trace_state(trace_handle, centerpoint-1, states[0]); // center point
+    if (total_states > centerpoint) {
+        write_trace_step(trace_handle, centerpoint-1, states[0], centerpoint, states[centerpoint]);
+        write_trace_state(trace_handle, centerpoint, states[centerpoint]);
+        for(int i = centerpoint+1; i<total_states; i++) {
+            write_trace_step(trace_handle, i-1, states[i-1], i, states[i]);
+            write_trace_state(trace_handle, i, states[i]);
+        }
+    }
+}
+
+
+
+// specific find_trace implementation for alignments (forward-backward search)
+static void
+align_trace_return (int* trace_dir)
+{
+    // global_level == number of segments >= number of states in trace?
+    rt_timer_t  timer = RTcreateTimer();
+    RTstartTimer(timer);
+    vset_t TMP = vset_create(domain, -1, NULL);
+    vset_t Prev = vset_create(domain, -1, NULL);
+    vset_t Cur = vset_create(domain, -1, NULL);
+    int last_0=0; // last index of FWD dir
+    int cur_0=0;
+    int last_1=0; // last index of BWD dir
+    int cur_1=0;
+    int center[1][N]; // a state in the intersection of FWD and BWD
+    int **states        = RTmalloc(sizeof(int*[global_level]));
+    for(int i = 0; i < global_level; i++)
+        states[i] = RTmalloc(sizeof(int[N]));
+
+    // get last index of dirs
+    for (int i=0; i<global_level; i++) {
+        if (trace_dir[i] == 0) last_0 = i;
+        else last_1 = i;
+        printf("%d: DIR: %d\n", i, trace_dir[i]);
+    }
+
+    int             init_state[N];
+    int             final_state[N];
+    hre_context_t   n = HREctxCreate(0, 1, "blah", 0);
+    lts_file_t      trace_output = lts_vset_template();
+    lts_type_t      ltstype = GBgetLTStype(model);
+
+    GBgetInitialState(model, init_state);
+    GBgetFinalState(model, final_state);
+    lts_file_set_context(trace_output, n);
+
+    // pick center state (=starting point from both searches)
+    if (last_1 == 0) { // in case only FWD
+        vset_clear(TMP);
+        vset_add(TMP, final_state);
+        vset_intersect(TMP, levels[last_0]);
+    }
+    else {
+        vset_copy(TMP, levels[last_0]);
+        vset_intersect(TMP, levels[last_1]);
+    }
+    HREassert(!vset_is_empty(TMP), "intersection of FWD and BWD shouldn't be empty");
+    vset_example(TMP,center[0]);
+
+    char* file_name=alloca((5+strlen(trc_output))*sizeof(char));
+    sprintf(file_name, "%s.%s", trc_output, trc_type);
+    Warning(info,"writing to file: %s",file_name);
+    trace_output = lts_file_create(file_name, ltstype, 1, trace_output);
+    lts_write_init(trace_output, 0, (uint32_t*)init_state);
+    int T=lts_type_get_type_count(ltstype);
+    for(int i=0;i<T;i++){
+        lts_file_set_table(trace_output,i,GBgetChunkMap(model,i));
+    }
+
+    // - states[0] = center
+    // - P = all prev states from center
+    // - X = earliest layer that has nonempty intersection with P
+    // - states[1] = pick from (P intersect X)
+    // continue above until initial state is found
+    // then do a similar thing for the BWD direction
+
+    cur_0 = last_0;
+    cur_1 = last_1;
+    int state_count = 0;
+
+    states[state_count++] = center[0];
+    while (1) {
+        while (cur_0 > 0 && trace_dir[--cur_0] == 1) {} // decrease while wrong direction
+        printf("cur0: %d\n", cur_0);
+
+        vset_clear(Prev);
+        vset_clear(Cur);
+        vset_add(Cur,states[state_count-1]);
+        LACE_ME;
+        for (int i = 0; i < nGrps; i++) {
+            expand_group_prev(i, Cur);
+            vset_next(TMP, Cur, group_prev[i]);
+            vset_union(Prev, TMP);
+        }
+        HREassert(!vset_is_empty(Prev), "Prev empty");
+        // End condition: check if init is in Prev
+        if (vset_member(Prev, init_state)) {
+            states[state_count++] = init_state;
+            break;
+        }
+        vset_copy(TMP, levels[cur_0]);
+        vset_intersect(TMP, Prev);
+        HREassert(!vset_is_empty(TMP), "Nonempty intersect");
+        // try to find a lower value for cur_0
+        while (cur_0 > 0) {
+            int tmp_0 = cur_0;
+            while (tmp_0 > 0 && trace_dir[--tmp_0] == 1) {}
+            vset_copy(TMP, levels[tmp_0]);
+            vset_intersect(TMP, Prev);
+            if (!vset_is_empty(TMP)) { cur_0 = tmp_0; } // found lower cur_0
+            else break; // empty intersection ==> no better choice for cur_0
+        }
+        vset_copy(TMP, levels[cur_0]);
+        vset_intersect(TMP, Prev);
+        HREassert(!vset_is_empty(TMP), "Nonempty intersect");
+        // add state
+        vset_example(TMP,states[state_count++]);
+    }
+    // backwards search
+    int center_count = state_count;
+    int initial = 1;
+    while (last_1) {
+        while (cur_1 > 0 && trace_dir[--cur_1] == 0) {}
+
+        vset_clear(Prev);
+        vset_clear(Cur);
+        if (initial) {
+            initial = 0;
+            vset_add(Cur,states[0]); // add center point
+        }
+        else vset_add(Cur,states[state_count-1]);
+        LACE_ME;
+        for (int i = 0; i < nGrps; i++) {
+            expand_group_next(i, Cur);
+            vset_next(TMP, Cur, group_next[i]);
+            vset_union(Prev, TMP);
+        }
+        HREassert(!vset_is_empty(Prev), "Prev empty");
+        // End condition: check if init is in Prev
+        if (vset_member(Prev, final_state)) {
+            states[state_count++] = final_state;
+            break;
+        }
+        vset_copy(TMP, levels[cur_1]);
+        vset_intersect(TMP, Prev);
+        HREassert(!vset_is_empty(TMP), "Nonempty intersect");
+        // try to find a lower value for cur_0
+        while (cur_1 > 0) {
+            int tmp_1 = cur_1;
+            while (tmp_1 > 0 && trace_dir[--tmp_1] == 0) {}
+            vset_copy(TMP, levels[tmp_1]);
+            vset_intersect(TMP, Prev);
+            if (!vset_is_empty(TMP)) { cur_1 = tmp_1; } // found lower cur_0
+            else break; // empty intersection ==> no better choice for cur_0
+        }
+        vset_copy(TMP, levels[cur_1]);
+        vset_intersect(TMP, Prev);
+        HREassert(!vset_is_empty(TMP), "Nonempty intersect");
+        // add state
+        vset_example(TMP,states[state_count++]);
+    }
+
+    write_align_trace(trace_output, states, state_count, center_count);
+
+    // Output trace
+    RTstopTimer(timer);
+    RTprintTimer(info, timer, "constructing trace took");
+
+    // Close output file
+    lts_file_close(trace_output);
+}
+
 // alignment report statistics
 static inline void
 aling_report (char* type, const char* dir, char* Tx, int level, int misc,
@@ -2279,7 +2464,7 @@ static void
 align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
                    long *eg_count, long *next_count, long *guard_count)
 {
-    (void) visited_old; (void) eg_count; (void) next_count; (void) guard_count; 
+    (void) visited_old; (void) eg_count; (void) next_count; (void) guard_count;
     // timing info
     struct timespec t1_nodereport, t2_nodereport;
     struct timespec t1_onegroup, t2_onegroup;
@@ -2287,9 +2472,12 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     const int REPORT_NODES = 1;
     const int REPORT_BLOCK = 2;
     const int REPORT_ONEGR = 4;
-    const int REPORT_STATS = (REPORT_NODES);
+    const int REPORT_STATS = 0; //REPORT_NODES);
     int prevTx, prevDir; // for switch block
     clock_gettime(CLOCK_REALTIME, &t2_block);
+
+    int max_states = 1024; // max allowed states in trace, TODO: scale up when level increases
+    int *trace_dir = RTmalloc(sizeof(int)*max_states);
 
     Warning(info, "Mapping groups to transitions");
     // constants
@@ -2354,7 +2542,6 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     // set initial state
     vset_copy(FNext, visited);
     vset_copy(FVis, visited);
-    if (trc_output != NULL) save_level(*Vis); // save initial level
 
     // set final state
     vset_t final = vset_create(domain, -1, NULL);
@@ -2364,6 +2551,16 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     Print(infoShort, "got final state");
     vset_copy(BVis, final);
     vset_copy(BNext, final);
+
+    if (trc_output != NULL) {
+        save_level(*Vis); // save initial level
+        trace_dir[level++] = dir;
+        if (align_variant == AL_DOUBLE || align_variant == AL_DOUBLE_ALL ||
+            align_variant == AL_DOUBLE_SMALLEST) {
+            save_level(BVis); // save initial level
+            trace_dir[level++] = 1;
+        }
+    }
 
     // run the algorithm
     Warning(info, "Performing the uniform-cost shortest path search");
@@ -2416,7 +2613,10 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
 
         // add to visited set
         vset_union(*Vis, *Next); // Vis := Vis ⋃ Next
-        if (trc_output != NULL) save_level(*Vis); // save current level
+        if (trc_output != NULL) {
+            save_level(*Vis); // save current level
+            trace_dir[level] = dir;
+        }
 
         if (REPORT_STATS & REPORT_BLOCK) aling_report("visadd", dirstr[dir],
                 ((Tx==T0)?"T0":"T1"), level, 0, &t1_block, &t2_block);
@@ -2460,7 +2660,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
             else if (dir == DIR_BWD) vset_intersect(TMP, FVis);
             if (!vset_is_empty(TMP)) {
                 Warning(info, "Found-alignment");
-                // TODO: trace construction
+                align_trace_return (trace_dir);
                 break;
             }
         } else if (align_variant == AL_INV) check_invariants(*Next, level);
@@ -3926,7 +4126,7 @@ inv_info_prepare(ltsmin_expr_t e, ltsmin_parse_env_t env, int i)
         bitvector_t deps;
         bitvector_create(&deps, N);
         set_pins_semantics(model, e, env, &deps, NULL);
-        
+
         const int len = bitvector_n_high(&deps);
 
         c = RTmalloc(sizeof(struct inv_info_s)
@@ -3939,9 +4139,9 @@ inv_info_prepare(ltsmin_expr_t e, ltsmin_parse_env_t env, int i)
         rel->deps = (int*) (rel->vec + N);
 
         e->destroy_context = inv_rel_destroy;
-        
+
         GBgetInitialState(model, rel->vec);
-        
+
         rel->len = len;
         bitvector_high_bits(&deps, rel->deps);
         rel->tmp = vset_create(domain, rel->len, rel->deps);
@@ -4109,7 +4309,7 @@ init_invariant_detection()
     inv_parse_env = (ltsmin_parse_env_t*) RTmalloc(sizeof(ltsmin_parse_env_t) * num_inv);
     inv_deps = (bitvector_t*) RTmalloc(sizeof(bitvector_t) * num_inv);
     inv_sl_deps = (bitvector_t*) RTmalloc(sizeof(bitvector_t) * num_inv);
-    
+
     for (int i = 0; i < num_inv; i++) {
         inv_parse_env[i] = LTSminParseEnvCreate();
         inv_expr[i] = pred_parse_file(inv_detect[i], inv_parse_env[i], ltstype);
@@ -4254,7 +4454,7 @@ mu_compute(ltsmin_expr_t mu_expr, ltsmin_parse_env_t env, vset_t visited, vset_t
                     if (n2 > max_mu_count) max_mu_count = n1;
                 }
             } while (!vset_equal(mu_var[mu_expr->idx], tmp));
-	    
+
             vset_destroy(tmp);
             // new var reference
             mu_var[mu_expr->idx] = old;
@@ -4470,7 +4670,7 @@ mu_rec(ltsmin_expr_t mu_expr, ltsmin_parse_env_t env, vset_t visited, mu_object_
                         MU_NAME(muo->sign[Z]), SIget(env->idents,Z), d1, e1, n1, d2, e2, n2);
 
                     if (n1 > max_mu_count) max_mu_count = n1;
-                    if (n2 > max_mu_count) max_mu_count = n1;                    
+                    if (n2 > max_mu_count) max_mu_count = n1;
                 }
 
                 // reset dependent variables with opposite sign
@@ -4807,7 +5007,7 @@ static void check_mu_go(vset_t visited, int i, int *init)
         } else {
             Warning(error, "Number of formulas doesn't match (%d+%d+%d+%d)", num_mu, num_ctl_star, num_ctl, num_ltl);
         }
-        
+
         if (log_active(infoLong)) {
             double e_count;
             vset_count(x, NULL, &e_count);
@@ -4941,11 +5141,11 @@ VOID_TASK_1(init_hre, hre_context_t, context)
     }
 }
 #else
-static void 
+static void
 init_hre(hre_context_t context)
-{       
+{
     HREprocessSet(context);
-    HREglobalSet(context); 
+    HREglobalSet(context);
 }
 #endif
 
