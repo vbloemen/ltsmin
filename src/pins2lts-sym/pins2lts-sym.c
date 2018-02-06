@@ -2289,8 +2289,6 @@ static void
 align_trace_return (int* trace_dir)
 {
     // global_level == number of segments >= number of states in trace?
-    rt_timer_t  timer = RTcreateTimer();
-    RTstartTimer(timer);
     vset_t TMP = vset_create(domain, -1, NULL);
     vset_t Prev = vset_create(domain, -1, NULL);
     vset_t Cur = vset_create(domain, -1, NULL);
@@ -2307,7 +2305,6 @@ align_trace_return (int* trace_dir)
     for (int i=0; i<global_level; i++) {
         if (trace_dir[i] == 0) last_0 = i;
         else last_1 = i;
-        printf("%d: DIR: %d\n", i, trace_dir[i]);
     }
 
     int             init_state[N];
@@ -2319,16 +2316,40 @@ align_trace_return (int* trace_dir)
     GBgetInitialState(model, init_state);
     GBgetFinalState(model, final_state);
     lts_file_set_context(trace_output, n);
+    cur_0 = last_0;
+    cur_1 = last_1;
+    int state_count = 0;
 
     // pick center state (=starting point from both searches)
     if (last_1 == 0) { // in case only FWD
         vset_clear(TMP);
         vset_add(TMP, final_state);
-        vset_intersect(TMP, levels[last_0]);
+        vset_intersect(TMP, levels[cur_0]);
+        while (vset_is_empty(TMP)) { // search for an earlier level
+            vset_clear(TMP);
+            vset_add(TMP, final_state);
+            cur_0 --;
+            vset_intersect(TMP, levels[cur_0]);
+        }
     }
     else {
-        vset_copy(TMP, levels[last_0]);
-        vset_intersect(TMP, levels[last_1]);
+        if (last_1 > last_0) { // last_1 has intersected
+            vset_copy(TMP, levels[last_1]);
+            vset_intersect(TMP, levels[cur_0]);
+            while (vset_is_empty(TMP)) { // search for any case
+                while (cur_0 > 0 && trace_dir[--cur_0] == 1) {} // decrease while wrong direction
+                vset_copy(TMP, levels[last_1]);
+                vset_intersect(TMP, levels[cur_0]);
+            }
+        } else { // last_0 has intersected
+            vset_copy(TMP, levels[last_0]);
+            vset_intersect(TMP, levels[cur_1]);
+            while (vset_is_empty(TMP)) { // search for any case
+                while (cur_1 > 0 && trace_dir[--cur_1] == 0) {} // decrease while wrong direction
+                vset_copy(TMP, levels[last_0]);
+                vset_intersect(TMP, levels[cur_1]);
+            }
+        }
     }
     HREassert(!vset_is_empty(TMP), "intersection of FWD and BWD shouldn't be empty");
     vset_example(TMP,center[0]);
@@ -2350,14 +2371,10 @@ align_trace_return (int* trace_dir)
     // continue above until initial state is found
     // then do a similar thing for the BWD direction
 
-    cur_0 = last_0;
-    cur_1 = last_1;
-    int state_count = 0;
 
     states[state_count++] = center[0];
-    while (1) {
+    while (last_0) {
         while (cur_0 > 0 && trace_dir[--cur_0] == 1) {} // decrease while wrong direction
-        printf("cur0: %d\n", cur_0);
 
         vset_clear(Prev);
         vset_clear(Cur);
@@ -2376,7 +2393,12 @@ align_trace_return (int* trace_dir)
         }
         vset_copy(TMP, levels[cur_0]);
         vset_intersect(TMP, Prev);
-        HREassert(!vset_is_empty(TMP), "Nonempty intersect");
+        while (vset_is_empty(TMP)) { // search for any case
+            while (cur_0 > 0 && trace_dir[--cur_0] == 1) {} // decrease while wrong direction
+            vset_copy(TMP, levels[cur_0]);
+            vset_intersect(TMP, Prev);
+        }
+        /*HREassert(!vset_is_empty(TMP), "Nonempty intersect");
         // try to find a lower value for cur_0
         while (cur_0 > 0) {
             int tmp_0 = cur_0;
@@ -2385,7 +2407,7 @@ align_trace_return (int* trace_dir)
             vset_intersect(TMP, Prev);
             if (!vset_is_empty(TMP)) { cur_0 = tmp_0; } // found lower cur_0
             else break; // empty intersection ==> no better choice for cur_0
-        }
+        }*/
         vset_copy(TMP, levels[cur_0]);
         vset_intersect(TMP, Prev);
         HREassert(!vset_is_empty(TMP), "Nonempty intersect");
@@ -2419,7 +2441,11 @@ align_trace_return (int* trace_dir)
         }
         vset_copy(TMP, levels[cur_1]);
         vset_intersect(TMP, Prev);
-        HREassert(!vset_is_empty(TMP), "Nonempty intersect");
+        while (vset_is_empty(TMP)) { // search for any case
+            while (cur_1 > 0 && trace_dir[--cur_1] == 0) {}
+            vset_copy(TMP, levels[cur_1]);
+            vset_intersect(TMP, Prev);
+        }
         // try to find a lower value for cur_0
         while (cur_1 > 0) {
             int tmp_1 = cur_1;
@@ -2437,10 +2463,6 @@ align_trace_return (int* trace_dir)
     }
 
     write_align_trace(trace_output, states, state_count, center_count);
-
-    // Output trace
-    RTstopTimer(timer);
-    RTprintTimer(info, timer, "constructing trace took");
 
     // Close output file
     lts_file_close(trace_output);
@@ -2468,13 +2490,18 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     // timing info
     struct timespec t1_nodereport, t2_nodereport;
     struct timespec t1_onegroup, t2_onegroup;
+    struct timespec t1_tracegen, t2_tracegen;
+    struct timespec t1_search, t2_search;
     struct timespec t1_block, t2_block;
     const int REPORT_NODES = 1;
     const int REPORT_BLOCK = 2;
     const int REPORT_ONEGR = 4;
-    const int REPORT_STATS = 0; //REPORT_NODES);
+    const int REPORT_TRACE = 8;
+    const int REPORT_SEARCH = 16;
+    const int REPORT_STATS = (REPORT_TRACE | REPORT_SEARCH);
     int prevTx, prevDir; // for switch block
     clock_gettime(CLOCK_REALTIME, &t2_block);
+    clock_gettime(CLOCK_REALTIME, &t2_search);
 
     int max_states = 1024; // max allowed states in trace, TODO: scale up when level increases
     int *trace_dir = RTmalloc(sizeof(int)*max_states);
@@ -2557,7 +2584,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
         trace_dir[level++] = dir;
         if (align_variant == AL_DOUBLE || align_variant == AL_DOUBLE_ALL ||
             align_variant == AL_DOUBLE_SMALLEST) {
-            save_level(BVis); // save initial level
+            save_level(BVis); // save final level
             trace_dir[level++] = 1;
         }
     }
@@ -2614,7 +2641,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
         // add to visited set
         vset_union(*Vis, *Next); // Vis := Vis ⋃ Next
         if (trc_output != NULL) {
-            save_level(*Vis); // save current level
+            save_level(*Next); // save current level
             trace_dir[level] = dir;
         }
 
@@ -2660,7 +2687,15 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
             else if (dir == DIR_BWD) vset_intersect(TMP, FVis);
             if (!vset_is_empty(TMP)) {
                 Warning(info, "Found-alignment");
-                align_trace_return (trace_dir);
+                if (REPORT_STATS & REPORT_SEARCH) aling_report("search",
+                        dirstr[dir], ((Tx==T0)?"T0":"T1"), level, 0,
+                        &t1_search, &t2_search);
+                if (REPORT_STATS & REPORT_TRACE) clock_gettime(CLOCK_REALTIME,
+                        &t2_tracegen);
+                align_trace_return (trace_dir); // Construct a trace
+                if (REPORT_STATS & REPORT_TRACE) aling_report("tracegen",
+                        dirstr[dir], ((Tx==T0)?"T0":"T1"), level, 0,
+                        &t1_tracegen, &t2_tracegen);
                 break;
             }
         } else if (align_variant == AL_INV) check_invariants(*Next, level);
