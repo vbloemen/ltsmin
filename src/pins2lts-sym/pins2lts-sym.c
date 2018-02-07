@@ -2417,7 +2417,7 @@ align_trace_return (int* trace_dir)
     // backwards search
     int center_count = state_count;
     int initial = 1;
-    while (last_1) {
+    while (last_1 > 1) { // there must be at least one backwards search
         while (cur_1 > 0 && trace_dir[--cur_1] == 0) {}
 
         vset_clear(Prev);
@@ -2682,11 +2682,9 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
         if (align_variant == AL_DOUBLE || align_variant == AL_FWD ||
                 align_variant == AL_DOUBLE_SMALLEST) {
             vset_copy(TMP, *Next);
-            // TODO: only check with BNext?
             if (dir == DIR_FWD) vset_intersect(TMP, BVis);
             else if (dir == DIR_BWD) vset_intersect(TMP, FVis);
             if (!vset_is_empty(TMP)) {
-                Warning(info, "Found-alignment");
                 if (REPORT_STATS & REPORT_SEARCH) aling_report("search",
                         dirstr[dir], ((Tx==T0)?"T0":"T1"), level, 0,
                         &t1_search, &t2_search);
@@ -2696,6 +2694,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
                 if (REPORT_STATS & REPORT_TRACE) aling_report("tracegen",
                         dirstr[dir], ((Tx==T0)?"T0":"T1"), level, 0,
                         &t1_tracegen, &t2_tracegen);
+                Warning(info, "Found-alignment");
                 break;
             }
         } else if (align_variant == AL_INV) check_invariants(*Next, level);
