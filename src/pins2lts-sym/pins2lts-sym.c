@@ -2522,6 +2522,8 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     // cost function
     int T0 = T_TAU | T_SYNC;
     int T1 = T_LOG | T_MODEL;
+    //int T0 = T_TAU | T_SYNC;
+    //int T1 = T_LOG;//T_LOG;
 
     // Search which actions are in which group, and store these in align_groups
     int  *align_groups  = RTmalloc(nGrps * sizeof(int));
@@ -2708,7 +2710,6 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
         // (possibly) switch between T0 and T1
         if (vset_is_empty(*Next) && Tx == T0) {
             if (!first) Tx = T1; // switch to a T1 step
-            else first = false; // only perform T0 step at the begin
             vset_copy(*Next, L0); // Next := L0
             vset_clear(L0);
             if (align_variant == AL_DOUBLE || align_variant == AL_DOUBLE_ALL
@@ -2718,7 +2719,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
                     vset_count_fn(FVis, &Fn_count, NULL);
                     vset_count_fn(BVis, &Bn_count, NULL);
                     // dir will be inverted, so set to opposite
-                    if (Fn_count > Bn_count) dir = DIR_FWD;
+                    if (first || Fn_count > Bn_count) dir = DIR_FWD;
                     else dir = DIR_BWD;
                 }
                 if (dir == DIR_FWD) {
@@ -2733,7 +2734,11 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
                     dir  = DIR_FWD;
                 }
             }
-            Warning(info,"Starting T1 on dir %s\n", dirstr[dir]);
+            if (first) {
+                first = false; // only perform T0 step at the begin
+                Warning(info,"Starting T0 on dir %s\n", dirstr[dir]);
+            }
+            else Warning(info,"Starting T1 on dir %s\n", dirstr[dir]);
         } else if (Tx == T1) {
             Tx = T0;
             Warning(info,"Starting T0 on dir %s\n", dirstr[dir]);
