@@ -2262,21 +2262,59 @@ reach_bfs(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
 }
 
 
+// Same function as write_trace_step, only this one restricts the transitions
+// to the groups from Tx (as defined in align_groups)
+static void
+write_trace_step_align(lts_file_t trace_handle, int src_no, int *src,
+                 int dst_no, int *dst, int Tx, int* align_groups)
+{
+    struct write_trace_step_s ctx;
+
+    Warning(debug, "finding edge for state %d", src_no);
+    ctx.trace_handle = trace_handle;
+    ctx.src_no = src_no;
+    ctx.dst_no = dst_no;
+    ctx.dst = dst;
+    ctx.found = 0;
+
+    for (int i = 0; i < nGrps && !ctx.found; i++) {
+        if ((align_groups[i] & Tx) == 0) continue;
+        GBgetTransitionsLong(model, i, src, write_trace_next, &ctx);
+    }
+
+    if (!ctx.found)
+        Abort("no matching transition found");
+}
+
+
+
 static void
 write_align_trace(lts_file_t trace_handle, int **states, int total_states,
-        int centerpoint)
+        int centerpoint, int* trace_tx, int* align_groups)
 {
+    /*printf("centerpoint: %d, total: %d\n", centerpoint, total_states);
+    for (int i=0; i<total_states; i++) {
+        printf("%d: TX: %d\n", i, trace_tx[i]);
+    }*/
     // output starting from initial state, which is in states[total_states-1]
     for(int i = 1; i<centerpoint; i++) {
         write_trace_state(trace_handle, i-1, states[centerpoint-i]);
-        write_trace_step(trace_handle, i-1, states[centerpoint-i], i, states[centerpoint-i-1]);
+        //printf("tx: %d %d\n", i, trace_tx[centerpoint-i-1]);
+        write_trace_step_align(trace_handle, i-1, states[centerpoint-i], i,
+                states[centerpoint-i-1], trace_tx[centerpoint-i-1],
+                align_groups);
     }
     write_trace_state(trace_handle, centerpoint-1, states[0]); // center point
     if (total_states > centerpoint) {
-        write_trace_step(trace_handle, centerpoint-1, states[0], centerpoint, states[centerpoint]);
+        //printf("tb: %d %d\n", centerpoint, trace_tx[centerpoint-1]);
+        write_trace_step_align(trace_handle, centerpoint-1, states[0],
+                centerpoint, states[centerpoint], trace_tx[centerpoint-1],
+                align_groups);
         write_trace_state(trace_handle, centerpoint, states[centerpoint]);
         for(int i = centerpoint+1; i<total_states; i++) {
-            write_trace_step(trace_handle, i-1, states[i-1], i, states[i]);
+            //printf("tc: %d %d\n", i, trace_tx[i-1]);
+            write_trace_step_align(trace_handle, i-1, states[i-1], i,
+                    states[i], trace_tx[i-1], align_groups);
             write_trace_state(trace_handle, i, states[i]);
         }
     }
@@ -2286,7 +2324,7 @@ write_align_trace(lts_file_t trace_handle, int **states, int total_states,
 
 // specific find_trace implementation for alignments (forward-backward search)
 static void
-align_trace_return (int* trace_dir)
+align_trace_return (int* trace_dir, int* trace_tx, int* align_groups)
 {
     // global_level == number of segments >= number of states in trace?
     vset_t TMP = vset_create(domain, -1, NULL);
@@ -2297,6 +2335,7 @@ align_trace_return (int* trace_dir)
     int last_1=0; // last index of BWD dir
     int cur_1=0;
     int center[1][N]; // a state in the intersection of FWD and BWD
+    int *new_trace_tx  = RTmalloc(sizeof(int)*global_level);
     int **states        = RTmalloc(sizeof(int*[global_level]));
     for(int i = 0; i < global_level; i++)
         states[i] = RTmalloc(sizeof(int[N]));
@@ -2305,6 +2344,7 @@ align_trace_return (int* trace_dir)
     for (int i=0; i<global_level; i++) {
         if (trace_dir[i] == 0) last_0 = i;
         else last_1 = i;
+        //printf("%d: DIR: %d, TX: %d\n", i, trace_dir[i], trace_tx[i]);
     }
 
     int             init_state[N];
@@ -2371,98 +2411,101 @@ align_trace_return (int* trace_dir)
     // continue above until initial state is found
     // then do a similar thing for the BWD direction
 
-
+    int txcount = 0;
     states[state_count++] = center[0];
+    LACE_ME;
+    //int rcount = 0;
     while (last_0) {
-        while (cur_0 > 0 && trace_dir[--cur_0] == 1) {} // decrease while wrong direction
-
+        //printf(".%d.: cur0: %d last0: %d\n", rcount++, cur_0, last_0);
+        //printf("A: cur0: %d\n", cur_0);
         vset_clear(Prev);
         vset_clear(Cur);
+        // states = [center, s1, s2, ...], where s2->s1->center is a path
         vset_add(Cur,states[state_count-1]);
-        LACE_ME;
+        HREassert(vset_member(levels[cur_0],states[state_count-1]),
+                "current layer should contain Cur");
+        new_trace_tx[txcount++] = trace_tx[cur_0];
         for (int i = 0; i < nGrps; i++) {
+            if ((align_groups[i] & trace_tx[cur_0]) == 0) continue;
             expand_group_prev(i, Cur);
             vset_next(TMP, Cur, group_prev[i]);
             vset_union(Prev, TMP);
         }
+        //printf("B: cur0: %d\n", cur_0);
         HREassert(!vset_is_empty(Prev), "Prev empty");
+        //printf("C: cur0: %d\n", cur_0);
+        // Prev contains previous states to the state from Cur
         // End condition: check if init is in Prev
         if (vset_member(Prev, init_state)) {
             states[state_count++] = init_state;
             break;
         }
-        vset_copy(TMP, levels[cur_0]);
-        vset_intersect(TMP, Prev);
+        // search for a previous level
+        vset_clear(TMP);
         while (vset_is_empty(TMP)) { // search for any case
-            while (cur_0 > 0 && trace_dir[--cur_0] == 1) {} // decrease while wrong direction
+            cur_0 --; // we're searching for a previous state such that Prev
+            // intersects with levels[cur_0]
+            while (cur_0 > 0 && trace_dir[cur_0] == 1) { cur_0 --;} // decrease while wrong direction
             vset_copy(TMP, levels[cur_0]);
             vset_intersect(TMP, Prev);
+            // TMP contains intersection between Prev and levels[cur_0]
         }
-        /*HREassert(!vset_is_empty(TMP), "Nonempty intersect");
-        // try to find a lower value for cur_0
-        while (cur_0 > 0) {
-            int tmp_0 = cur_0;
-            while (tmp_0 > 0 && trace_dir[--tmp_0] == 1) {}
-            vset_copy(TMP, levels[tmp_0]);
-            vset_intersect(TMP, Prev);
-            if (!vset_is_empty(TMP)) { cur_0 = tmp_0; } // found lower cur_0
-            else break; // empty intersection ==> no better choice for cur_0
-        }*/
-        vset_copy(TMP, levels[cur_0]);
-        vset_intersect(TMP, Prev);
-        HREassert(!vset_is_empty(TMP), "Nonempty intersect");
         // add state
         vset_example(TMP,states[state_count++]);
     }
+
     // backwards search
     int center_count = state_count;
     int initial = 1;
     while (last_1 > 1) { // there must be at least one backwards search
-        while (cur_1 > 0 && trace_dir[--cur_1] == 0) {}
-
+        //printf(".%d.: cur1: %d last1: %d\n", rcount++, cur_1, last_1);
+        //printf("A: cur1: %d\n", cur_1);
         vset_clear(Prev);
         vset_clear(Cur);
+        // states = [center, s1, s2, ...], where s2->s1->center is a path
         if (initial) {
             initial = 0;
             vset_add(Cur,states[0]); // add center point
+            HREassert(vset_member(levels[cur_1],states[0]),
+                "current layer should contain Cur");
         }
-        else vset_add(Cur,states[state_count-1]);
-        LACE_ME;
+        else {
+            vset_add(Cur,states[state_count-1]);
+            HREassert(vset_member(levels[cur_1],states[state_count-1]),
+                "current layer should contain Cur");
+        }
+        new_trace_tx[txcount++] = trace_tx[cur_1];
         for (int i = 0; i < nGrps; i++) {
+            if ((align_groups[i] & trace_tx[cur_1]) == 0) continue;
             expand_group_next(i, Cur);
             vset_next(TMP, Cur, group_next[i]);
             vset_union(Prev, TMP);
         }
+        //printf("B: cur1: %d\n", cur_1);
         HREassert(!vset_is_empty(Prev), "Prev empty");
-        // End condition: check if init is in Prev
+        //printf("C: cur1: %d\n", cur_1);
+        // Prev contains NEXT states from the state from Cur
+        // End condition: check if final is in Prev
         if (vset_member(Prev, final_state)) {
             states[state_count++] = final_state;
             break;
         }
-        vset_copy(TMP, levels[cur_1]);
-        vset_intersect(TMP, Prev);
+        // search for a 'previous' level
+        vset_clear(TMP);
         while (vset_is_empty(TMP)) { // search for any case
-            while (cur_1 > 0 && trace_dir[--cur_1] == 0) {}
+            cur_1 --; // we're searching for a next state such that Prev
+            // intersects with levels[cur_1]
+            while (cur_1 > 0 && trace_dir[cur_1] == 0) { cur_1 --;} // decrease while wrong direction
             vset_copy(TMP, levels[cur_1]);
             vset_intersect(TMP, Prev);
+            // TMP contains intersection between Prev and levels[cur_0]
         }
-        // try to find a lower value for cur_0
-        while (cur_1 > 0) {
-            int tmp_1 = cur_1;
-            while (tmp_1 > 0 && trace_dir[--tmp_1] == 0) {}
-            vset_copy(TMP, levels[tmp_1]);
-            vset_intersect(TMP, Prev);
-            if (!vset_is_empty(TMP)) { cur_1 = tmp_1; } // found lower cur_0
-            else break; // empty intersection ==> no better choice for cur_0
-        }
-        vset_copy(TMP, levels[cur_1]);
-        vset_intersect(TMP, Prev);
-        HREassert(!vset_is_empty(TMP), "Nonempty intersect");
         // add state
         vset_example(TMP,states[state_count++]);
     }
 
-    write_align_trace(trace_output, states, state_count, center_count);
+    write_align_trace(trace_output, states, state_count, center_count,
+            new_trace_tx, align_groups);
 
     // Close output file
     lts_file_close(trace_output);
@@ -2505,6 +2548,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
 
     int max_states = 1024; // max allowed states in trace, TODO: scale up when level increases
     int *trace_dir = RTmalloc(sizeof(int)*max_states);
+    int *trace_tx  = RTmalloc(sizeof(int)*max_states);
 
     Warning(info, "Mapping groups to transitions");
     // constants
@@ -2520,10 +2564,10 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     const int   align_ids[4]  = {T_LOG, T_MODEL, T_SYNC, T_TAU};
 
     // cost function
-    int T0 = T_TAU | T_SYNC;
-    int T1 = T_LOG | T_MODEL;
     //int T0 = T_TAU | T_SYNC;
-    //int T1 = T_LOG;//T_LOG;
+    //int T1 = T_LOG | T_MODEL;
+    int T0 = T_TAU | T_SYNC;// | T_MODEL;
+    int T1 = T_LOG;//T_LOG;
 
     // Search which actions are in which group, and store these in align_groups
     int  *align_groups  = RTmalloc(nGrps * sizeof(int));
@@ -2583,11 +2627,13 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
 
     if (trc_output != NULL) {
         save_level(*Vis); // save initial level
+        trace_tx[level] = T0;
         trace_dir[level++] = dir;
         if (align_variant == AL_DOUBLE || align_variant == AL_DOUBLE_ALL ||
             align_variant == AL_DOUBLE_SMALLEST) {
             save_level(BVis); // save final level
-            trace_dir[level++] = 1;
+            trace_tx[level] = T0;
+            trace_dir[level++] = DIR_BWD;
         }
     }
 
@@ -2644,6 +2690,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
         vset_union(*Vis, *Next); // Vis := Vis ⋃ Next
         if (trc_output != NULL) {
             save_level(*Next); // save current level
+            trace_tx[level] = Tx;
             trace_dir[level] = dir;
         }
 
@@ -2692,7 +2739,7 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
                         &t1_search, &t2_search);
                 if (REPORT_STATS & REPORT_TRACE) clock_gettime(CLOCK_REALTIME,
                         &t2_tracegen);
-                align_trace_return (trace_dir); // Construct a trace
+                align_trace_return (trace_dir, trace_tx, align_groups); // Construct a trace
                 if (REPORT_STATS & REPORT_TRACE) aling_report("tracegen",
                         dirstr[dir], ((Tx==T0)?"T0":"T1"), level, 0,
                         &t1_tracegen, &t2_tracegen);
