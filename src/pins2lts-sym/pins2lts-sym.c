@@ -2564,10 +2564,10 @@ align(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     const int   align_ids[4]  = {T_LOG, T_MODEL, T_SYNC, T_TAU};
 
     // cost function
+    int T0 = T_TAU | T_SYNC;
+    int T1 = T_LOG | T_MODEL;
     //int T0 = T_TAU | T_SYNC;
-    //int T1 = T_LOG | T_MODEL;
-    int T0 = T_TAU | T_SYNC;// | T_MODEL;
-    int T1 = T_LOG;//T_LOG;
+    //int T1 = T_MODEL;//T_LOG;
 
     // Search which actions are in which group, and store these in align_groups
     int  *align_groups  = RTmalloc(nGrps * sizeof(int));
