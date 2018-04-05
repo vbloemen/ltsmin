@@ -854,7 +854,7 @@ GBaddLTL (model_t model)
                lts_type_get_state_label_name(ltstype, old_idx));
     }
 
-    if (PINS_LTL == PINS_LTL_NONE) PINS_LTL = PINS_LTL_SPIN;
+    if (PINS_LTL == PINS_LTL_AUTO) PINS_LTL = PINS_LTL_SPIN;
 
     ltsmin_buchi_t *ba = init_ltsmin_buchi(model, ltl_file);
 
