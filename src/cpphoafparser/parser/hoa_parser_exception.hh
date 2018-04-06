@@ -44,7 +44,7 @@ public:
   HOAParserException(const std::string& what, int line, int col) :
     std::runtime_error(what), hasLocation(true), line(line), col(col) {}
 
-private:
+protected:
   /** True if we have location information */
   bool hasLocation;
   /** The line number */
