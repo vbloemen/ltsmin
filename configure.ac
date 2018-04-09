@@ -511,6 +511,7 @@ AC_CONFIG_FILES([
        examples/Makefile
        src/Makefile
        src/andl-lib/Makefile
+       src/cpphoafparser/Makefile
        src/hre-io/Makefile
        src/hre/Makefile
        src/hre-mpi/Makefile

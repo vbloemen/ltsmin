@@ -98,5 +98,7 @@ SUBDIRS += scripts
 
 SUBDIRS += tests
 
+SUBDIRS += cpphoafparser
+
 # make
 .DELETE_ON_ERROR:
