@@ -695,8 +695,9 @@ init_ltsmin_hoa(model_t model, const char *hoa_file) {
     if (NULL == shared_ba && cas(&grab_ba, 0, 1)) {
         Warning(info, "HOA: %s", hoa_file);
         ltsmin_parse_env_t env = LTSminParseEnvCreate();
+        ltsmin_buchi_t *ba = NULL;
 #ifdef HAVE_SPOT
-        ltsmin_buchi_t *ba = ltsmin_create_hoa(hoa_file, env, GBgetLTStype(model)); // TODO: get out of Spot
+        ba = ltsmin_create_hoa(hoa_file, env, GBgetLTStype(model)); // TODO: get out of Spot
 #endif
 
         if (NULL == ba) {
