@@ -86,9 +86,9 @@ ltl_to_store_helper (char *at, ltsmin_lin_expr_t *le, ltsmin_parse_env_t env, in
       case LTL_DIV:
       case LTL_REM:
       case LTL_ADD:
-      case LTL_SUB: 
+      case LTL_SUB:
       default:
-        Abort("unhandled LTL_TOKEN: %d\n", le->lin_expr[i]->token); 
+        Abort("unhandled LTL_TOKEN: %d\n", le->lin_expr[i]->token);
         break;
     }
   }
@@ -98,7 +98,7 @@ ltl_to_store_helper (char *at, ltsmin_lin_expr_t *le, ltsmin_parse_env_t env, in
 // linearizes the ltl expression to an array of tokens
 // then iterates over this array and creates a string for the formula
 // all found predicates are stored in a lookup list
-static char *
+char *
 ltl_to_store (ltsmin_expr_t e, ltsmin_parse_env_t env)
 {
   // linearize expression
@@ -130,7 +130,7 @@ check_edgevar(ltsmin_expr_t e, ltsmin_parse_env_t env)
             return -1;
         case PRED_SVAR:
             return 0;
-        case PRED_EVAR: 
+        case PRED_EVAR:
             return 1; {
             return e->chunk_cache;
         }
@@ -148,9 +148,9 @@ check_edgevar(ltsmin_expr_t e, ltsmin_parse_env_t env)
         case PRED_GT:
         case PRED_GEQ:
         case PRED_MULT:
-        case PRED_DIV: 
-        case PRED_REM: 
-        case PRED_ADD: 
+        case PRED_DIV:
+        case PRED_REM:
+        case PRED_ADD:
         case PRED_SUB: {
             //Warning(info, "[%s]", LTSminPrintExpr (e, env));
             int ev = check_edgevar(e->arg1, env);
@@ -177,8 +177,8 @@ spot::twa_graph_ptr spot_automaton;
 bool isTGBA;
 HOAConsumerLTSmin *cons;
 
-static int 
-get_predicate_index(std::vector<std::string> pred_vec, std::string predicate) 
+static int
+get_predicate_index(std::vector<std::string> pred_vec, std::string predicate)
 {
   // iterate over the vector until the predicate matches
   for (size_t i=0; i<pred_vec.size(); i++) {
@@ -201,12 +201,12 @@ create_ltsmin_buchi(spot::twa_graph_ptr& aut, ltsmin_parse_env_t env)
 
   // create the ltsmin_buchi_t
   ltsmin_buchi_t *ba = NULL;
-  ba = (ltsmin_buchi_t*) RTmalloc(sizeof(ltsmin_buchi_t) + aut->num_states() * 
+  ba = (ltsmin_buchi_t*) RTmalloc(sizeof(ltsmin_buchi_t) + aut->num_states() *
     sizeof(ltsmin_buchi_state_t*));
 
   // initialize rabin to NULL; it's only used for Rabin automata
   ba->rabin = NULL;
-  
+
   ba->state_count     = aut->num_states();
   ba->predicate_count = aut->ap().size();
 
@@ -217,7 +217,7 @@ create_ltsmin_buchi(spot::twa_graph_ptr& aut, ltsmin_parse_env_t env)
     for (size_t i=0; i<aut->num_sets(); i++)
       acceptance_set |= (1ULL << i);
   }
-  else 
+  else
     HREassert(aut->num_sets() == 1, "Multiple acceptance sets for BA");
   ba->acceptance_set = acceptance_set;
 
@@ -255,7 +255,7 @@ create_ltsmin_buchi(spot::twa_graph_ptr& aut, ltsmin_parse_env_t env)
   for (int _s = 0; _s < ba->state_count; _s++) {
     int s = state_map[_s];
 
-    // iterate over the outgoing edges to count it 
+    // iterate over the outgoing edges to count it
     int transition_count = 0;
     for (auto& t: aut->out(s)) {
       std::string cond = spot::bdd_format_formula(dict, t.cond);
@@ -270,13 +270,13 @@ create_ltsmin_buchi(spot::twa_graph_ptr& aut, ltsmin_parse_env_t env)
 
     // create the transitions
     ltsmin_buchi_state_t * bs = NULL;
-    bs = (ltsmin_buchi_state_t*) RTmalloc(sizeof(ltsmin_buchi_state_t) + 
+    bs = (ltsmin_buchi_state_t*) RTmalloc(sizeof(ltsmin_buchi_state_t) +
       transition_count * sizeof(ltsmin_buchi_transition_t));
     bs->transition_count = transition_count;
 
-    if (isTGBA) 
+    if (isTGBA)
       bs->accept = 0;
-    else 
+    else
       bs->accept = aut->state_is_accepting(s);
 
     // iterate over the transitions
@@ -313,11 +313,11 @@ create_ltsmin_buchi(spot::twa_graph_ptr& aut, ltsmin_parse_env_t env)
                 HREassert(pred_index >= 0, "Predicate not found");
                 if (is_neg)
                   bs->transitions[trans_index].neg[0] |= (1 << pred_index);
-                else 
+                else
                   bs->transitions[trans_index].pos[0] |= (1 << pred_index);
                 pred_start = -1;
                 is_neg = false;
-              } 
+              }
               else
                 pred_start = c_i; // start point of predicate
               } break;
@@ -353,13 +353,13 @@ create_ltsmin_buchi(spot::twa_graph_ptr& aut, ltsmin_parse_env_t env)
 
 
 static ltsmin_buchi_t *
-create_ltsmin_rabin(std::istream& hoa_input) {
-
-  cons = new HOAConsumerLTSmin();
+create_ltsmin_rabin(std::istream& hoa_input, ltsmin_parse_env_t env, lts_type_t ltstype)
+{
+  cons = new HOAConsumerLTSmin(env, ltstype);
   cons->set_ltsmin_expr_list(le_list);
 
   HOAConsumer::ptr consumer(cons);
-  
+
   try {
 
     HOAParser::parse(hoa_input, consumer);
@@ -369,12 +369,11 @@ create_ltsmin_rabin(std::istream& hoa_input) {
     Abort("Could not read tmp.hoa");
   }
 
-
   return NULL;
 }
 
-void 
-ltsmin_ltl2spot(ltsmin_expr_t e, ltsmin_parse_env_t env) 
+void
+ltsmin_ltl2spot(ltsmin_expr_t e, ltsmin_parse_env_t env)
 {
   // construct the LTL formula and store the predicates
   char *buff = ltl_to_store(e, env);
@@ -403,26 +402,26 @@ ltsmin_ltl2spot(ltsmin_expr_t e, ltsmin_parse_env_t env)
       std::string command = "echo \"" + ltl + "\" | tr \\# \\\" > /tmp/tmp.ltl"
       + " && ltldo --relabel 'ltl3dra' -F /tmp/tmp.ltl | autfilt --generalized-rabin=share-inf > /tmp/ltl3dra.hoa";
 
-      if (system(command.c_str())) 
+      if (system(command.c_str()))
         Warning(info,"Could not use system command for ltl3dra");
 
       command = "echo \"" + ltl + "\" | tr \\# \\\" > /tmp/tmp.ltl"
       + " && ltldo --relabel 'ltl3hoa' -F /tmp/tmp.ltl | autfilt --generalized-rabin=share-inf > /tmp/ltl3hoa.hoa";
 
-      if (system(command.c_str())) 
+      if (system(command.c_str()))
         Warning(info,"Could not use system command for ltl3hoa");
 
       command = "echo \"" + ltl + "\" | tr \\# \\\" > /tmp/tmp.ltl"
       + " && cat /tmp/tmp.ltl | ltldo --relabel 'rabinizer3 -silent -format=hoa -in=formula -out=std %[RWMei^]f > %O'"
       + " | autfilt --generalized-rabin=share-inf > /tmp/rabinizer3.hoa";
 
-      if (system(command.c_str())) 
+      if (system(command.c_str()))
         Warning(info, "Could not use system command for rabinizer3");
 
       command = "echo \"" + ltl + "\" | tr \\# \\\" > /tmp/tmp.ltl"
       + " && cat /tmp/tmp.ltl | ltl2tgba | autfilt --generalized-rabin > /tmp/tgbarabin.hoa";
 
-      if (system(command.c_str())) 
+      if (system(command.c_str()))
         Warning(info, "Problems occurred when constructing a TGBA-TGRA");
 
       Abort("Finished generating rabin!");
@@ -452,7 +451,7 @@ ltsmin_ltl2spot(ltsmin_expr_t e, ltsmin_parse_env_t env)
 
     // read HOA output
     std::ifstream hoa_file ("/tmp/tmp.hoa");
-    create_ltsmin_rabin(hoa_file);
+    create_ltsmin_rabin(hoa_file, NULL, NULL);
 
   } else {
 
@@ -478,13 +477,22 @@ ltsmin_ltl2spot(ltsmin_expr_t e, ltsmin_parse_env_t env)
 
 
 ltsmin_buchi_t *
-ltsmin_hoa_buchi(ltsmin_parse_env_t env) 
+ltsmin_hoa_buchi(ltsmin_parse_env_t env)
 {
   if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
     return cons->get_ltsmin_buchi();
   } else {
     return create_ltsmin_buchi(spot_automaton, env);
   }
+}
+
+ltsmin_buchi_t *
+ltsmin_create_hoa(const char *hoa_file, ltsmin_parse_env_t env, lts_type_t ltstype)
+{
+    std::ifstream parse_file (hoa_file);
+    create_ltsmin_rabin(parse_file, env, ltstype);
+
+    return cons->get_ltsmin_buchi();
 }
 
 void

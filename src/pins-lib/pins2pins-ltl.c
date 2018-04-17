@@ -32,6 +32,7 @@ uint32_t                HOA_ACCEPTING_SET = 0;
 int                     RABIN_N_PAIRS = 0;
 rabin_t                *RABIN_PAIRS = NULL;
 static char            *ltl_file = NULL;
+static char            *hoa_file = NULL;
 static const char      *ltl_semantics_name = "none";
 static const char      *buchi_type = "spotba";
 static const char      *rabin_pair_order = "seq";
@@ -155,6 +156,8 @@ struct poptOption ltl_options[] = {
      "LTL semantics", "<spin|textbook|ltsmin> (default: \"auto\")"},
     {"buchi-type", 0, POPT_ARG_STRING | POPT_ARGFLAG_SHOW_DEFAULT, &buchi_type, 0,
      "Buchi automaton type", "<ba|tgba|spotba|rabinizer3|ltl3dra|ltl3hoa|genrabin|readrabin>"},
+    {"hoa", 0, POPT_ARG_STRING, &hoa_file, 0, "Negated LTL property in HOA format or file containing HOA",
+     "<HOA>.hoa|<HOA>"},
     {"rabin-order", 0, POPT_ARG_STRING | POPT_ARGFLAG_SHOW_DEFAULT, &rabin_pair_order, 0,
      "Rabin pair order", "<seq|par>"},
     POPT_TABLEEND
@@ -685,6 +688,35 @@ static void check_LTL(ltsmin_expr_t e, ltsmin_parse_env_t env,
     }
 }
 
+/* Parses a HOA file and returns an ltsmin_buchi_t object
+ */
+ltsmin_buchi_t *
+init_ltsmin_hoa(model_t model, const char *hoa_file) {
+    if (NULL == shared_ba && cas(&grab_ba, 0, 1)) {
+        Warning(info, "HOA: %s", hoa_file);
+        ltsmin_parse_env_t env = LTSminParseEnvCreate();
+#ifdef HAVE_SPOT
+        ltsmin_buchi_t *ba = ltsmin_create_hoa(hoa_file, env, GBgetLTStype(model)); // TODO: get out of Spot
+#endif
+
+        if (NULL == ba) {
+            Print(info, "Empty HOA.");
+            Print(info, "The property is TRUE.");
+            HREexit(LTSMIN_EXIT_SUCCESS);
+        }
+        if (ba->predicate_count > 30) {
+            Abort("more than 30 predicates in buchi automaton are currently not supported");
+        }
+        ba->env = env;
+        atomic_write (&shared_ba, ba);
+        print_ltsmin_buchi(ba, env);
+    } else {
+        while (NULL == atomic_read(&shared_ba)) {}
+    }
+    return atomic_read(&shared_ba);
+}
+
+
 /* NOTE: this is hack around non-thread-safe ltl2ba
  * In multi-process environment, all processes create their own buchi,
  * which is what we want anyway, because ltsmin_ltl2ba uses strdup.
@@ -845,7 +877,7 @@ ltl_exit (model_t model)
 model_t
 GBaddLTL (model_t model)
 {
-    if (ltl_file == NULL) return model;
+    if (ltl_file == NULL && hoa_file == NULL) return model;
 
     lts_type_t ltstype = GBgetLTStype(model);
     int old_idx = pins_get_accepting_state_label_index (model);
@@ -856,7 +888,12 @@ GBaddLTL (model_t model)
 
     if (PINS_LTL == PINS_LTL_AUTO) PINS_LTL = PINS_LTL_SPIN;
 
-    ltsmin_buchi_t *ba = init_ltsmin_buchi(model, ltl_file);
+    ltsmin_buchi_t* ba = NULL;
+    if (hoa_file != NULL)
+        ba = init_ltsmin_hoa(model, hoa_file);
+    else // ltl_file != NULL
+        ba = init_ltsmin_buchi(model, ltl_file);
+
 
     model_t         ltlmodel = GBcreateBase();
     ltl_context_t *ctx = RTmalloc(sizeof *ctx);

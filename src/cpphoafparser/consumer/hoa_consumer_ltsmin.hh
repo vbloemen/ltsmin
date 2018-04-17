@@ -28,6 +28,8 @@ extern "C" {
 #include <vector>
 #include <string>
 
+#include <ltsmin-lib/ltl2spot.h>
+
 #include <cpphoafparser/consumer/hoa_consumer.hh>
 #include <cpphoafparser/parser/hoa_parser_helper.hh>
 
@@ -38,6 +40,12 @@ namespace cpphoafparser {
  */
 class HOAConsumerLTSmin : public HOAConsumer {
 public:
+
+  // constructor
+  HOAConsumerLTSmin(ltsmin_parse_env_t _env, lts_type_t _ltstype) {
+    env = _env;
+    ltstype = _ltstype;
+  }
 
   /* returns the constructed ltsmin_buchi_t object */
   ltsmin_buchi_t *get_ltsmin_buchi() {
@@ -91,15 +99,37 @@ public:
 
     //std::cout << "found predicates: " << std::endl;
     for (const std::string& ap : aps) {
-      std::string ap_name = ap;
-      replace( ap_name.begin(), ap_name.end(), '\'', '\"');
+        std::string ap_name = ap;
+        replace( ap_name.begin(), ap_name.end(), '\'', '\"');
+        std::string tmp = "";
+        // TODO: change to better parsing of predicates (without
+        // pred_parse_file)
+        if (le_list == NULL){
+            for (unsigned long i=0; i<ap_name.length(); i++) {
+                if (ap_name[i] == '.') tmp += '\\';
+                if (ap_name[i] == '-') tmp += '\\';
+                tmp += ap_name[i];
+            }
+            //std::cout << "Changed '" << ap_name << "' to '" << tmp << "'" << std::endl;
+            ap_name = tmp;
+        }
 
-      ltsmin_expr_t e = ltsmin_expr_lookup(NULL, (char*) ap_name.c_str(), &le_list);
+        // search for the ltsmin expression
+        ltsmin_expr_t e;
+        if (le_list == NULL) { // TODO: le_list er uiteindelijk uit slopen
+            //std::cout << "Start adding: " << ap_name << std::endl;
+            LTSminParseEnvReset(env);
+            e = pred_parse_file ((char*) ap_name.c_str(), env, ltstype);
+            e = LTSminExprClone(e); // create copy
+            //std::cout << "Done adding: " << ap_name << std::endl;
+        } else {
+            e = ltsmin_expr_lookup(NULL, (char*) ap_name.c_str(), &le_list);
+        }
 
-      HREassert(e, "Empty LTL expression");
+        HREassert(e, "Empty LTL expression");
 
-      ba->predicates[i] = e;
-      i++;
+        ba->predicates[i] = e;
+        i++;
     }
   }
 
@@ -346,6 +376,8 @@ private:
   int tmp_pos, tmp_neg;
   ltsmin_buchi_t *ba = NULL;
   ltsmin_expr_list_t *le_list = NULL;
+  ltsmin_parse_env_t env = NULL;
+  lts_type_t ltstype = NULL;
   uint32_t s_acc = 0;
   int transition_count = 0;
   int state_index = 0;

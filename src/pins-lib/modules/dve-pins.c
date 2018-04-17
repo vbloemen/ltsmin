@@ -339,7 +339,7 @@ DVE2loadGreyboxModel(model_t model, const char *filename)
         }
         int type_value_count = get_state_variable_type_value_count(i);
         if (0 == type_value_count) {
-            lts_type_set_format (ltstype, i, LTStypeDirect);
+            lts_type_set_format (ltstype, i, LTStypeSInt32);
         } else {
             lts_type_set_format (ltstype, i, LTStypeEnum);
         }
