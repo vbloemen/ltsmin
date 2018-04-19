@@ -479,6 +479,7 @@ ltsmin_ltl2spot(ltsmin_expr_t e, ltsmin_parse_env_t env)
 ltsmin_buchi_t *
 ltsmin_hoa_buchi(ltsmin_parse_env_t env)
 {
+    parse_file(NULL);
   if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
     return cons->get_ltsmin_buchi();
   } else {
@@ -486,14 +487,6 @@ ltsmin_hoa_buchi(ltsmin_parse_env_t env)
   }
 }
 
-ltsmin_buchi_t *
-ltsmin_create_hoa(const char *hoa_file, ltsmin_parse_env_t env, lts_type_t ltstype)
-{
-    std::ifstream parse_file (hoa_file);
-    create_ltsmin_rabin(parse_file, env, ltstype);
-
-    return cons->get_ltsmin_buchi();
-}
 
 void
 ltsmin_hoa_destroy()

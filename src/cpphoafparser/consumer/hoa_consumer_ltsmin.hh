@@ -25,6 +25,7 @@ extern "C" {
 }
 
 #include <iostream>
+#include <algorithm>
 #include <vector>
 #include <string>
 
@@ -100,7 +101,7 @@ public:
     //std::cout << "found predicates: " << std::endl;
     for (const std::string& ap : aps) {
         std::string ap_name = ap;
-        replace( ap_name.begin(), ap_name.end(), '\'', '\"');
+        std::replace( ap_name.begin(), ap_name.end(), '\'', '\"');
         std::string tmp = "";
         // TODO: change to better parsing of predicates (without
         // pred_parse_file)

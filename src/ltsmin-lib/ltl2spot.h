@@ -14,7 +14,6 @@ extern "C" {
 void ltsmin_ltl2spot(ltsmin_expr_t e, ltsmin_parse_env_t env);
 ltsmin_buchi_t* ltsmin_hoa_buchi(ltsmin_parse_env_t env);
 void ltsmin_hoa_destroy();
-ltsmin_buchi_t* ltsmin_create_hoa(const char *hoa_file, ltsmin_parse_env_t env, lts_type_t ltstype);
 char* ltl_to_store (ltsmin_expr_t e, ltsmin_parse_env_t env);
 
 #ifdef __cplusplus

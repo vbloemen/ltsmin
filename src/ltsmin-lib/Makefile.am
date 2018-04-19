@@ -33,6 +33,9 @@ libltsmin_la_CPPFLAGS = -DNXT
 libltsmin_la_CPPFLAGS+= -I${top_srcdir}/ltl2ba $(AM_CPPFLAGS) 
 libltsmin_la_CPPFLAGS+= -I${top_srcdir}
 
+# hoa
+libltsmin_la_SOURCES    += hoa2aut.cpp hoa2aut.h
+
 # spot
 if HAVE_SPOT
 libltsmin_la_SOURCES    += ltl2spot.cpp ltl2spot.h

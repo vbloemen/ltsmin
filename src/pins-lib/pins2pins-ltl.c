@@ -12,10 +12,7 @@
 #include <hre/user.h>
 #include <ltsmin-lib/ltl2ba-lex.h>
 
-#ifdef HAVE_SPOT
-#include <ltsmin-lib/ltl2spot.h>
-#endif
-
+#include <ltsmin-lib/hoa2aut.h>
 #include <ltsmin-lib/ltl2spot.h>
 #include <ltsmin-lib/ltsmin-standard.h>
 #include <mc-lib/atomics.h>
@@ -695,10 +692,8 @@ init_ltsmin_hoa(model_t model, const char *hoa_file) {
     if (NULL == shared_ba && cas(&grab_ba, 0, 1)) {
         Warning(info, "HOA: %s", hoa_file);
         ltsmin_parse_env_t env = LTSminParseEnvCreate();
-        ltsmin_buchi_t *ba = NULL;
-#ifdef HAVE_SPOT
-        ba = ltsmin_create_hoa(hoa_file, env, GBgetLTStype(model)); // TODO: get out of Spot
-#endif
+        ltsmin_buchi_t *ba = ltsmin_create_hoa(hoa_file, env, GBgetLTStype(model));
+        PINS_BUCHI_TYPE = PINS_BUCHI_TYPE_RABIN;
 
         if (NULL == ba) {
             Print(info, "Empty HOA.");
