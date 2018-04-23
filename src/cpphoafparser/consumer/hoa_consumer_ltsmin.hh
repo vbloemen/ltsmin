@@ -212,8 +212,8 @@ public:
 
     // in case no acceptance info is provided, search the accExpr for info
     int n_pairs = recurCountPairs(accExpr);
-    if (ba->rabin == NULL)
-        allocRabin(n_pairs);
+    //if (ba->rabin == NULL)
+    allocRabin(n_pairs);
     bool containsFin = recurContainsFin(accExpr);
 
     // Extract the HOA type
