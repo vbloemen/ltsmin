@@ -999,8 +999,8 @@ GBaddLTL (model_t model)
             RABIN_PAIRS       = ba->rabin;
         }
         else {
-            RABIN_N_PAIRS     = 0;
-            RABIN_PAIRS       = NULL;
+            RABIN_N_PAIRS     = 1;
+            RABIN_PAIRS       = ba->rabin;
         }
 
         ctx->el_idx_accept_set = edge_labels;
