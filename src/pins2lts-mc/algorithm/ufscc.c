@@ -93,13 +93,17 @@ ufscc_global_deinit (run_t *run, wctx_t *ctx)
 void
 ufscc_local_init (run_t *run, wctx_t *ctx)
 {
+    if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
+        Abort("UFSCC cannot check Rabin acceptance");
+    }
+
     ctx->local = RTmallocZero (sizeof (alg_local_t) );
     uf_alg_shared_t    *shared = (uf_alg_shared_t*) ctx->run->shared;
 
     ctx->local->target = state_info_create ();
     ctx->local->root   = state_info_create ();
 
-    // extend state with TGBA acceptance marks information
+    // extend state with TGBA/Fin-less acceptance marks information
     state_info_add_simple (ctx->state, sizeof (uint32_t),
                           &ctx->local->state_acc);
     state_info_add_simple (ctx->local->target, sizeof (uint32_t),
@@ -131,7 +135,7 @@ ufscc_local_init (run_t *run, wctx_t *ctx)
         ctx->local->rctx->parent = ctx;
     }
 
-    (void) run; 
+    (void) run;
 }
 
 
@@ -157,8 +161,9 @@ ufscc_handle (void *arg, state_info_t *successor, transition_info_t *ti,
     raw_data_t          stack_loc;
     uint32_t            acc_set   = 0;
 
-    // TGBA acceptance
-    if (ti->labels != NULL && PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA) {
+    // TGBA/Fin-less acceptance
+    if (ti->labels != NULL && (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA
+                || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS)) {
         acc_set = ti->labels[pins_get_accepting_set_edge_label_index(ctx->model)];
     }
 
@@ -167,9 +172,13 @@ ufscc_handle (void *arg, state_info_t *successor, transition_info_t *ti,
     // self-loop
     if (ctx->state->ref == successor->ref) {
         loc->cnt.selfloop ++;
-        if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
+        if ((PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA
+            || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) && shared->ltl) {
             uint32_t acc = uf_add_acc (shared->uf, successor->ref + 1, acc_set);
-            if (GBgetAcceptingSet() == acc) {
+            if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA
+                    && ((acc & GBgetAcceptingSet()) == GBgetAcceptingSet())) {
+                report_lasso (ctx, ctx->state->ref);
+            } else if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS && GBisFinlessAccepting(acc)) {
                 report_lasso (ctx, ctx->state->ref);
             }
         } else if (shared->ltl) { // BA
@@ -188,7 +197,8 @@ ufscc_handle (void *arg, state_info_t *successor, transition_info_t *ti,
     state_info_serialize (successor, stack_loc);
 
     // add acceptance set to the state
-    if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA) {
+    if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA
+            || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) {
         state_info_deserialize (loc->target, stack_loc); // search_stack TOP
         loc->target_acc = acc_set;
         state_info_serialize (loc->target, stack_loc);
@@ -249,7 +259,7 @@ ufscc_init  (wctx_t *ctx)
 
     ufscc_handle (ctx, ctx->initial, &ti, 0);
     claim = uf_make_claim (shared->uf, ctx->initial->ref + 1, ctx->id);
-    
+
     // explore the initial state
     state_data = dfs_stack_top (loc->search_stack);
     state_info_deserialize (ctx->state, state_data); // search_stack TOP
@@ -324,9 +334,13 @@ successor (wctx_t *ctx)
 
         if (uf_sameset (shared->uf, loc->target->ref + 1, ctx->state->ref + 1)) {
             // add transition acceptance set
-            if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
+            if ((PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA
+                || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) && shared->ltl) {
                 uint32_t acc = uf_add_acc (shared->uf, ctx->state->ref + 1, loc->state_acc);
-                if (GBgetAcceptingSet() == acc) {
+                if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA
+                        && ((acc & GBgetAcceptingSet()) == GBgetAcceptingSet())) {
+                    report_lasso (ctx, ctx->state->ref);
+                } else if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS && GBisFinlessAccepting(acc)) {
                     report_lasso (ctx, ctx->state->ref);
                 }
             }
@@ -349,7 +363,8 @@ successor (wctx_t *ctx)
             root_data = dfs_stack_pop (loc->roots_stack); // UF Stack POP
             state_info_deserialize (loc->root, root_data); // roots_stack TOP
 
-            if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
+            if ((PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA
+                || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) && shared->ltl) {
                 // add the acceptance set from the previous root, not the current one
                 // otherwise we could add the acceptance set for the edge
                 // betweem two SCCs (which cannot be part of a cycle)
@@ -366,9 +381,13 @@ successor (wctx_t *ctx)
         dfs_stack_push (loc->roots_stack, root_data);
 
         // after uniting SCC, report lasso
-        if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA && shared->ltl) {
+        if ((PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA
+            || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) && shared->ltl) {
             acc_set = uf_get_acc (shared->uf, ctx->state->ref + 1);
-            if (GBgetAcceptingSet() == acc_set) {
+            if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA
+                    && ((acc_set & GBgetAcceptingSet()) == GBgetAcceptingSet())) {
+                report_lasso (ctx, ctx->state->ref);
+            } else if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS && GBisFinlessAccepting(acc_set)) {
                 report_lasso (ctx, ctx->state->ref);
             }
         } else if (accepting != DUMMY_IDX) {
@@ -451,7 +470,7 @@ backtrack (wctx_t *ctx)
 
         // we may still have states on the stack of this SCC
         if ( uf_sameset (shared->uf, loc->target->ref + 1, ctx->state->ref + 1) ) {
-            return; // backtrack in same set 
+            return; // backtrack in same set
             // (the state got marked dead AFTER the previous sameset check)
         }
 
@@ -601,7 +620,7 @@ ufscc_shared_init   (run_t *run)
 
     set_alg_local_init    (run->alg, ufscc_local_init);
     set_alg_global_init   (run->alg, ufscc_global_init);
-    set_alg_global_deinit (run->alg, ufscc_global_deinit); 
+    set_alg_global_deinit (run->alg, ufscc_global_deinit);
     set_alg_local_deinit  (run->alg, ufscc_local_deinit);
     set_alg_print_stats   (run->alg, ufscc_print_stats);
     set_alg_run           (run->alg, ufscc_run);

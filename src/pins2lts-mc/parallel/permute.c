@@ -167,7 +167,8 @@ perm_todo (permute_t *perm, transition_info_t *ti, int seen)
     todo->ti.group = ti->group;
     todo->ti.por_proviso = ti->por_proviso;
     if (EXPECT_FALSE(act_detect || files[1] || 
-        (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN)))
+        (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN
+         || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS)))
         memcpy (todo->ti.labels, ti->labels, sizeof(int*[perm->labels]));
     perm->nstored++;
     ti->por_proviso = perm->por_proviso;
@@ -389,7 +390,8 @@ permute_create (permutation_perm_t permutation, model_t model, alg_state_seen_f 
     perm->labels = lts_type_get_edge_label_count (GBgetLTStype(model));
     for (size_t i = 0; i < K+TODO_MAX; i++) {
         if (act_detect || files[1] || 
-        (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN)) {
+        (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN
+         || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS)) {
             perm->todos[i].ti.labels = RTmalloc (sizeof(int*[perm->labels]));
         } else {
             perm->todos[i].ti.labels = NULL;
@@ -450,7 +452,8 @@ permute_free (permute_t *perm)
         RTfree (perm->rand);
     }
     if (act_detect || files[1] || 
-    (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN)) {
+    (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN
+     || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS)) {
         for (size_t i = 0; i < K+TODO_MAX; i++) {
             RTfree (perm->todos[i].ti.labels);
         }

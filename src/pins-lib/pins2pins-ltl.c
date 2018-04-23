@@ -68,6 +68,17 @@ GBgetAcceptingSet ()
     return HOA_ACCEPTING_SET;
 }
 
+int GBisFinlessAccepting (uint32_t acc)
+{
+    // return true if there is at least one pair for which it is accepting
+    for (int i=0; i<RABIN_N_PAIRS; i++) {
+        if ((acc & RABIN_PAIRS->pairs[i].inf_set) == RABIN_PAIRS->pairs[i].inf_set) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int
 GBgetRabinNPairs ()
 {
@@ -251,7 +262,8 @@ void ltl_ltsmin_cb (void *context, transition_info_t *ti, int *dst, int *cpy) {
 
     int i = infoctx->src[ctx->ltl_idx];
     HREassert (i < ctx->ba->state_count);
-    if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
+    if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN
+            || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) {
         HREassert (ctx->edge_labels_old == ctx->el_idx_accept_set);
         memcpy (ctx->labels, ti->labels, sizeof(int[ctx->edge_labels_old]));
         ti->labels = ctx->labels; // inline because por_proviso is passed up
@@ -264,7 +276,8 @@ void ltl_ltsmin_cb (void *context, transition_info_t *ti, int *dst, int *cpy) {
             dst_buchi[ctx->ltl_idx] = ctx->ba->states[i]->transitions[j].to_state;
 
             // allocate the edge labels and write the TGBA acceptance set
-            if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
+            if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN
+                    || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) {
                 ti->labels[ctx->el_idx_accept_set] =
                                 ctx->ba->states[i]->transitions[j].acc_set;
             }
@@ -320,7 +333,8 @@ void ltl_spin_cb (void *context, transition_info_t *ti, int *dst, int *cpy) {
 
     int i = infoctx->src[ctx->ltl_idx];
     HREassert (i < ctx->ba->state_count);
-    if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
+    if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN
+            || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) {
         HREassert (ctx->edge_labels_old == ctx->el_idx_accept_set);
         memcpy (ctx->labels, ti->labels, sizeof(int[ctx->edge_labels_old]));
         ti->labels = ctx->labels; // inline because por_proviso is passed up
@@ -333,7 +347,8 @@ void ltl_spin_cb (void *context, transition_info_t *ti, int *dst, int *cpy) {
             dst_buchi[ctx->ltl_idx] = ctx->ba->states[i]->transitions[j].to_state;
 
             // allocate the edge labels and write the TGBA acceptance set
-            if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
+            if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN
+                    || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) {
                 ti->labels[ctx->el_idx_accept_set] =
                                 ctx->ba->states[i]->transitions[j].acc_set;
             }
@@ -390,7 +405,8 @@ ltl_spin_all (model_t self, int *src, TransitionCB cb,
                            group, ctx->groups, ctx->ba->states[i]->transitions[j].index);
 
                 // set the edge label for the TGBA acceptance set
-                if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
+                if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN
+                        || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) {
                     ctx->labels[ctx->el_idx_accept_set] =
                                     ctx->ba->states[i]->transitions[j].acc_set;
                 }

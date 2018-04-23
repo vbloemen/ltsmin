@@ -77,6 +77,8 @@ extern model_t GBaddLTL(model_t model);
 
 extern uint32_t GBgetAcceptingSet ();
 
+extern int GBisFinlessAccepting (uint32_t acc);
+
 extern int GBgetRabinNPairs ();
 
 extern uint32_t GBgetRabinPairFin (int pair_id);
