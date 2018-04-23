@@ -152,14 +152,14 @@ public:
       HREassert(accExpr->isAtom(), "Unknown acceptance condition"); // we only allow AND and Atoms
       AtomAcceptance atom = accExpr->getAtom();
       HREassert(!atom.isNegated(), "We don't allow negated atoms"); // we don't allow negated atoms yet
-      
+
       // decide if its FIN or INF
       uint32_t acc_mark = ( 1 << ((uint32_t) atom.getAcceptanceSet()));
       if (atom.getType() == AtomAcceptance::AtomType::TEMPORAL_FIN) {
         //std::cout << " FIN:" << acc_mark << " ";
         ba->rabin->pairs[pair_id].fin_set |= acc_mark;
         ba->acceptance_set |= acc_mark;
-        
+
       }
       else if (atom.getType() == AtomAcceptance::AtomType::TEMPORAL_INF) {
         //std::cout << " INF:" << acc_mark << " ";
@@ -167,38 +167,12 @@ public:
         ba->acceptance_set |= acc_mark;
       }
       else {
-        HREassert(false, "We don't support acceptance atoms other than Fin or Inf"); 
+        HREassert(false, "We don't support acceptance atoms other than Fin or Inf");
       }
     }
   }
 
-  virtual void setAcceptanceCondition(unsigned int numberOfSets, acceptance_expr::ptr accExpr) override {
-    // We assume generalized rabin acceptance
-    //std::cout << "Acceptance: " << numberOfSets << " " << *accExpr << std::endl;
-    
-    recurAcceptance(accExpr,0);
-    //std::cout << std::endl;
-    (void) numberOfSets;
-  }
-
-  virtual void provideAcceptanceName(const std::string& name, const std::vector<IntOrString>& extraInfo) override {
-    int n_pairs = 1;
-    // case 1: rabin or GRA
-    std::string rabin ("Rabin");
-    std::string gra ("generalized-Rabin");
-    if (gra.compare(name) == 0 || rabin.compare(name) == 0) {
-      // get the number of rabin pairs
-      HREassert(extraInfo.size() > 0, "Info on the number of pairs is not available in the HOA"); 
-      HREassert(extraInfo[0].isInteger(), "First extra element for generalized rabin should indicate the number of pairs"); 
-
-      //std::cout << "Number of pairs: " << extraInfo[0].getInteger() << std::endl;
-      n_pairs = extraInfo[0].getInteger();
-    }
-    // case 2: simpler automata
-    else {
-      n_pairs = 1;
-    }
-
+  void allocRabin(int n_pairs) {
     ba->rabin = (rabin_t*) RTmalloc(sizeof(rabin_t) + n_pairs * sizeof(rabin_pair_t) );
     ba->rabin->n_pairs = n_pairs;
 
@@ -208,6 +182,79 @@ public:
       ba->rabin->pairs[i].inf_set = 0;
     }
     ba->acceptance_set = 0;
+  }
+
+  int recurCountPairs(acceptance_expr::ptr accExpr) {
+    int count = 0;
+    if (accExpr->isOR()) {
+      count += recurCountPairs(accExpr->getLeft());
+      count += recurCountPairs(accExpr->getRight());
+    } else return 1;
+    return count;
+  }
+
+  int recurContainsFin(acceptance_expr::ptr accExpr) {
+    if (accExpr->isOR() || accExpr->isAND()) {
+      return recurContainsFin(accExpr->getLeft()) || recurContainsFin(accExpr->getLeft());
+    } else {
+        // we only allow AND and Atoms
+        HREassert(accExpr->isAtom(), "Unknown acceptance condition");
+        AtomAcceptance atom = accExpr->getAtom();
+        if (atom.getType() == AtomAcceptance::AtomType::TEMPORAL_FIN)
+            return true;
+        else return false;
+    }
+  }
+
+  virtual void setAcceptanceCondition(unsigned int numberOfSets, acceptance_expr::ptr accExpr) override {
+    // We assume generalized rabin acceptance
+    //std::cout << "Acceptance: " << numberOfSets << " " << *accExpr << std::endl;
+
+    // in case no acceptance info is provided, search the accExpr for info
+    int n_pairs = recurCountPairs(accExpr);
+    if (ba->rabin == NULL)
+        allocRabin(n_pairs);
+    bool containsFin = recurContainsFin(accExpr);
+
+    // Extract the HOA type
+    if (containsFin) {
+        PINS_BUCHI_TYPE = PINS_BUCHI_TYPE_RABIN;
+    } else if (n_pairs == 1) {
+        // Rabin pair is set, but not used (acceptance_set is sufficient)
+        PINS_BUCHI_TYPE = PINS_BUCHI_TYPE_TGBA; // maybe also filter out BA
+    } else {
+        PINS_BUCHI_TYPE = PINS_BUCHI_TYPE_FINLESS;
+    }
+
+    recurAcceptance(accExpr,0);
+    //std::cout << std::endl;
+    (void) numberOfSets;
+  }
+
+  virtual void provideAcceptanceName(const std::string& name, const std::vector<IntOrString>& extraInfo) override {
+    // ignore the name (doesn't have to be used anyway)
+    (void) name;
+    (void) extraInfo;
+    /*
+    int n_pairs = 1;
+    // case 1: rabin or GRA
+    std::string rabin ("Rabin");
+    std::string gra ("generalized-Rabin");
+    if (gra.compare(name) == 0 || rabin.compare(name) == 0) {
+      // get the number of rabin pairs
+      HREassert(extraInfo.size() > 0, "Info on the number of pairs is not available in the HOA");
+      HREassert(extraInfo[0].isInteger(), "First extra element for generalized rabin should indicate the number of pairs");
+
+      //std::cout << "Number of pairs: " << extraInfo[0].getInteger() << std::endl;
+      n_pairs = extraInfo[0].getInteger();
+    }
+    // case 2: simpler automata
+    else {
+      n_pairs = 1;
+    }
+
+    allocRabin(n_pairs);
+    */
   }
 
   virtual void setName(const std::string& name) override {
@@ -241,7 +288,7 @@ public:
       for (unsigned int acc : *accSignature) {
         s_acc |= (1 << acc);
       }
-    } 
+    }
     (void) id;
     (void) info;
     (void) labelExpr;
@@ -265,7 +312,7 @@ public:
       for (unsigned int acc : *accSignature) {
         t_acc |= (1 << acc);
       }
-    } 
+    }
 
     transitions.push_back(tmp_pos);
     transitions.push_back(tmp_neg);
@@ -276,7 +323,7 @@ public:
   }
 
   // parses the predicate that is assigned to a transition
-  void parsePredicate(label_expr::ptr labelExpr, bool negated, 
+  void parsePredicate(label_expr::ptr labelExpr, bool negated,
                       const int_list& conjSuccessors,
                       std::shared_ptr<int_list> accSignature) {
     if (labelExpr->isAND()) {
@@ -288,7 +335,7 @@ public:
 
       // add the transition and reset
       addTransition (conjSuccessors, accSignature);
-      tmp_pos = 0; 
+      tmp_pos = 0;
       tmp_neg = 0;
 
       parsePredicate(labelExpr->getRight(), false, conjSuccessors, accSignature);
@@ -297,14 +344,14 @@ public:
       parsePredicate(labelExpr->getLeft(), !negated, conjSuccessors, accSignature);
     }
     else if (labelExpr->isTRUE()) {
-      HREassert(!negated, "True predicate should not be negated") 
+      HREassert(!negated, "True predicate should not be negated")
       tmp_neg = 0;
       tmp_pos = 0;
     }
     else if (labelExpr->isAtom()) {
       HREassert(!labelExpr->getAtom().isAlias(), "Atom should not be an alias");
       uint32_t ap_index = labelExpr->getAtom().getAPIndex();
-      if (negated) 
+      if (negated)
         tmp_neg |= (1 << ap_index);
       else
         tmp_pos |= (1 << ap_index);
@@ -321,9 +368,9 @@ public:
                                 std::shared_ptr<int_list> accSignature) override {
 
     // we can only handle deterministic successors
-    HREassert(conjSuccessors.size()==1, "Nondeterministic choice of successors"); 
+    HREassert(conjSuccessors.size()==1, "Nondeterministic choice of successors");
 
-    tmp_pos = 0; 
+    tmp_pos = 0;
     tmp_neg = 0;
     if (labelExpr) {
       parsePredicate(labelExpr, false, conjSuccessors, accSignature);

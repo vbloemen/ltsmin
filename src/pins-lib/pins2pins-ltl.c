@@ -35,7 +35,6 @@ static const char      *buchi_type = "spotba";
 static const char      *rabin_pair_order = "seq";
 pins_ltl_type_t         PINS_LTL = PINS_LTL_AUTO;
 pins_buchi_type_t       PINS_BUCHI_TYPE = PINS_BUCHI_TYPE_BA;
-pins_rabin_type_t       PINS_RABIN_TYPE = PINS_RABIN_TYPE_LTL3HOA;
 pins_rabin_pair_order_t PINS_RABIN_PAIR_ORDER = PINS_RABIN_PAIR_SEQ;
 
 static const int        TEXTBOOK_INIT = (1UL << 30);
@@ -51,21 +50,9 @@ static si_map_entry db_ltl_semantics[]={
 static si_map_entry db_buchi_type[]={
     {"ba",      PINS_BUCHI_TYPE_BA},
     {"tgba",    PINS_BUCHI_TYPE_TGBA},
-    {"rabinizer3",PINS_BUCHI_TYPE_RABIN},
-    {"ltl3dra", PINS_BUCHI_TYPE_RABIN},
-    {"ltl3hoa", PINS_BUCHI_TYPE_RABIN},
-    {"genrabin",PINS_BUCHI_TYPE_RABIN},
-    {"readrabin",PINS_BUCHI_TYPE_RABIN},
+    {"gra",     PINS_BUCHI_TYPE_RABIN},
+    {"finless", PINS_BUCHI_TYPE_FINLESS},
     {"spotba",  PINS_BUCHI_TYPE_SPOTBA},
-    {NULL, 0}
-};
-
-static si_map_entry db_rabin_type[]={
-    {"rabinizer3",PINS_RABIN_TYPE_RABINIZER},
-    {"ltl3dra", PINS_RABIN_TYPE_LTL3DRA},
-    {"ltl3hoa", PINS_RABIN_TYPE_LTL3HOA},
-    {"genrabin",PINS_RABIN_TYPE_GEN},
-    {"readrabin",PINS_RABIN_TYPE_READ},
     {NULL, 0}
 };
 
@@ -129,10 +116,7 @@ ltl_popt (poptContext con, enum poptCallbackReason reason,
             }
             Print (infoLong, "Buchi type: %s", buchi_type);
             PINS_BUCHI_TYPE = b;
-            if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
-                int r = linear_search (db_rabin_type, buchi_type);
-                PINS_RABIN_TYPE = r;
-
+            if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) {
                 Print (infoLong, "Rabin pair order: %s", rabin_pair_order);
                 int ro = linear_search (db_rabin_pair_order, rabin_pair_order);
                 PINS_RABIN_PAIR_ORDER = ro;
@@ -152,8 +136,8 @@ struct poptOption ltl_options[] = {
     {"ltl-semantics", 0, POPT_ARG_STRING, &ltl_semantics_name, 0,
      "LTL semantics", "<spin|textbook|ltsmin> (default: \"auto\")"},
     {"buchi-type", 0, POPT_ARG_STRING | POPT_ARGFLAG_SHOW_DEFAULT, &buchi_type, 0,
-     "Buchi automaton type", "<ba|tgba|spotba|rabinizer3|ltl3dra|ltl3hoa|genrabin|readrabin>"},
-    {"hoa", 0, POPT_ARG_STRING, &hoa_file, 0, "Negated LTL property in HOA format or file containing HOA",
+     "Buchi automaton type", "<ba|tgba|spotba|finless|gra>"},
+    {"hoa", 0, POPT_ARG_STRING, &hoa_file, 0, "Negated LTL property in HOA format or file containing HOA (buchi type is ignored and parsed from the HOA)",
      "<HOA>.hoa|<HOA>"},
     {"rabin-order", 0, POPT_ARG_STRING | POPT_ARGFLAG_SHOW_DEFAULT, &rabin_pair_order, 0,
      "Rabin pair order", "<seq|par>"},
@@ -437,7 +421,8 @@ void ltl_textbook_cb (void *c, transition_info_t *ti, int *dst, int *cpy) {
     int i = infoctx->src[ctx->ltl_idx];
     if (i == TEXTBOOK_INIT) { i=0; } /* textbook: extra initial state */
     HREassert (i < ctx->ba->state_count );
-    if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
+    if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN
+            || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) {
         HREassert (ctx->edge_labels_old == ctx->el_idx_accept_set);
         memcpy (ctx->labels, ti->labels, sizeof(int[ctx->edge_labels_old]));
         ti->labels = ctx->labels; // inline because por_proviso is passed up
@@ -450,7 +435,8 @@ void ltl_textbook_cb (void *c, transition_info_t *ti, int *dst, int *cpy) {
             dst_buchi[ctx->ltl_idx] = ctx->ba->states[i]->transitions[j].to_state;
 
             // allocate the edge labels and write the TGBA acceptance set
-            if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
+            if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN
+                    || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) {
                 ti->labels[ctx->el_idx_accept_set] =
                                 ctx->ba->states[i]->transitions[j].acc_set;
             }
@@ -692,8 +678,20 @@ init_ltsmin_hoa(model_t model, const char *hoa_file) {
     if (NULL == shared_ba && cas(&grab_ba, 0, 1)) {
         Warning(info, "HOA: %s", hoa_file);
         ltsmin_parse_env_t env = LTSminParseEnvCreate();
+
+        // Create an LTSmin automaton from the HOA
         ltsmin_buchi_t *ba = ltsmin_create_hoa(hoa_file, env, GBgetLTStype(model));
-        PINS_BUCHI_TYPE = PINS_BUCHI_TYPE_RABIN;
+
+        // Print info
+        if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_BA) {
+            Warning(info, "Buchi type BA");
+        } else if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA) {
+            Warning(info, "Buchi type TGBA");
+        } else if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
+            Warning(info, "Buchi type Rabin");
+        } else if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) {
+            Warning(info, "Buchi type Fin-less");
+        } else Warning(info, "Unknown Buchi type");
 
         if (NULL == ba) {
             Print(info, "Empty HOA.");
@@ -760,18 +758,16 @@ init_ltsmin_buchi(model_t model, const char *ltl_file)
         ltsmin_buchi_t *ba;
 #ifdef HAVE_SPOT
         if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA ||
-            PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_SPOTBA || 
-            PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
+            PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_SPOTBA) {
 
             ltsmin_ltl2spot(notltl, env);
-            ba = ltsmin_hoa_buchi(env);
+            ba = ltsmin_spot_buchi(env);
 
             // debug
             HREassert(ba != NULL, "Buchi automata is NULL");
-        
         } else {
 #endif
-            HREassert(PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_BA, 
+            HREassert(PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_BA,
                 "Buchi type %s is not possible without Spot", buchi_type);
             ltsmin_ltl2ba(notltl);
             ba = ltsmin_buchi();
@@ -875,6 +871,11 @@ GBaddLTL (model_t model)
 {
     if (ltl_file == NULL && hoa_file == NULL) return model;
 
+    // check that RABIN or FINLESS are always parsed as HOA TODO
+    if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
+        HREassert (hoa_file != NULL, "Fin-less and generalized Rabin automata must be parsed from a HOA");
+    }
+
     lts_type_t ltstype = GBgetLTStype(model);
     int old_idx = pins_get_accepting_state_label_index (model);
     if (old_idx != -1) {
@@ -964,7 +965,8 @@ GBaddLTL (model_t model)
                                          lts_type_get_state_label_typeno(ltstype,i));
     }
 
-    if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
+    if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN
+            || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) {
         /* Edge labels */
         int acc_set_type = lts_type_add_type (ltstype_new, LTSMIN_EDGE_TYPE_ACCEPTING_SET, NULL);
 
@@ -976,7 +978,7 @@ GBaddLTL (model_t model)
         lts_type_set_edge_label_typeno (ltstype_new, edge_labels, acc_set_type);
         lts_type_set_format (ltstype_new, acc_set_type, LTStypeDirect);
         HOA_ACCEPTING_SET = ba->acceptance_set;
-        if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
+        if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS) {
             RABIN_N_PAIRS     = ba->rabin->n_pairs;
             RABIN_PAIRS       = ba->rabin;
         }

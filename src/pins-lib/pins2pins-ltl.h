@@ -46,6 +46,7 @@ typedef enum {
     PINS_BUCHI_TYPE_BA,
     PINS_BUCHI_TYPE_TGBA,
     PINS_BUCHI_TYPE_RABIN,
+    PINS_BUCHI_TYPE_FINLESS,
     PINS_BUCHI_TYPE_SPOTBA,
 } pins_buchi_type_t;
 
@@ -56,29 +57,7 @@ extern pins_buchi_type_t PINS_BUCHI_TYPE;
 
 
 /**
- * \brief rabin translator used for obtaining a rabin automata.
- * The GEN type is used for generating (and then aborting)
- * HOA files in the three different formats, and READ takes one
- * statically defined HOA file as input and parses and uses it.
- * The motivation is to prevent installing rabin translators on
- * Machines with no root access, so LTL translation can occur 
- * elsewhere.
- */
-typedef enum {
-    PINS_RABIN_TYPE_RABINIZER,
-    PINS_RABIN_TYPE_LTL3DRA,
-    PINS_RABIN_TYPE_LTL3HOA,
-    PINS_RABIN_TYPE_GEN,
-    PINS_RABIN_TYPE_READ,
-} pins_rabin_type_t;
-
-/**
- * \brief rabin translator type
- */
-extern pins_rabin_type_t PINS_RABIN_TYPE;
-
-/**
- * \brief option indicating whether rabin pairs are checked 
+ * \brief option indicating whether rabin pairs are checked
  * in parallel or sequentially.
  */
 typedef enum {

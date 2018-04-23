@@ -787,8 +787,9 @@ favoid_state_seen (void *ptr, transition_info_t *ti, ref_t ref, int seen)
 void
 favoid_shared_init   (run_t *run)
 {
-    HREassert (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN, 
-        "The F avoidance algorithm can only be used for Rabin automata");
+    HREassert (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN
+            || PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_FINLESS,
+        "The F avoidance algorithm can only be used for Rabin or Fin-less automata");
 
     favoid_shared_t    *shared;
 

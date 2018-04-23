@@ -12,7 +12,7 @@ extern "C" {
 #include <pins-lib/pins2pins-ltl.h>
 
 void ltsmin_ltl2spot(ltsmin_expr_t e, ltsmin_parse_env_t env);
-ltsmin_buchi_t* ltsmin_hoa_buchi(ltsmin_parse_env_t env);
+ltsmin_buchi_t* ltsmin_spot_buchi(ltsmin_parse_env_t env);
 void ltsmin_hoa_destroy();
 char* ltl_to_store (ltsmin_expr_t e, ltsmin_parse_env_t env);
 

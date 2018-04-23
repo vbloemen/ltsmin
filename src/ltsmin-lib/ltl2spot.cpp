@@ -189,13 +189,9 @@ get_predicate_index(std::vector<std::string> pred_vec, std::string predicate)
 }
 
 
-
 static ltsmin_buchi_t *
 create_ltsmin_buchi(spot::twa_graph_ptr& aut, ltsmin_parse_env_t env)
 {
-  // ensure that the automaton is deterministic (apparently this is not possible)
-  //HREassert(spot::is_deterministic(aut), "The automaton is not deterministic");
-
   // We need the dictionary to print the BDDs that label the edges
   const auto& dict = aut->get_dict();
 
@@ -339,7 +335,6 @@ create_ltsmin_buchi(spot::twa_graph_ptr& aut, ltsmin_parse_env_t env)
               break;
           }
         }
-
         trans_index ++;
     }
     ba->states[_s] = bs;
@@ -351,109 +346,22 @@ create_ltsmin_buchi(spot::twa_graph_ptr& aut, ltsmin_parse_env_t env)
   return ba;
 }
 
-
-static ltsmin_buchi_t *
-create_ltsmin_rabin(std::istream& hoa_input, ltsmin_parse_env_t env, lts_type_t ltstype)
-{
-  cons = new HOAConsumerLTSmin(env, ltstype);
-  cons->set_ltsmin_expr_list(le_list);
-
-  HOAConsumer::ptr consumer(cons);
-
-  try {
-
-    HOAParser::parse(hoa_input, consumer);
-
-  } catch (std::exception& e) {
-    std::cerr << e.what() << std::endl;
-    Abort("Could not read tmp.hoa");
-  }
-
-  return NULL;
-}
-
 void
 ltsmin_ltl2spot(ltsmin_expr_t e, ltsmin_parse_env_t env)
 {
-  // construct the LTL formula and store the predicates
-  char *buff = ltl_to_store(e, env);
-  std::string ltl = std::string(buff);
+    // construct the LTL formula and store the predicates
+    char *buff = ltl_to_store(e, env);
+    std::string ltl = std::string(buff);
 
-  // modify #(a1 == "S")#  to  "(a1 == 'S')"
-  replace( ltl.begin(), ltl.end(), '"', '\'');
-  if (PINS_BUCHI_TYPE != PINS_BUCHI_TYPE_RABIN) {
+    // modify #(a1 == "S")#  to  "(a1 == 'S')"
+    replace( ltl.begin(), ltl.end(), '"', '\'');
     replace( ltl.begin(), ltl.end(), '#', '\"');
-  }
 
-  // output the LTL formula
-  if (log_active(infoLong)) {
-    std::string msg = "Spot LTL formula: " + ltl;
-    Warning(infoLong, msg.c_str(), 0);
-  }
-
-  // TODO: Replace system calls
-  if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
-
-    if (PINS_RABIN_TYPE == PINS_RABIN_TYPE_READ) {
-      // assumes /tmp/tmp.hoa already exists
+    // output the LTL formula
+    if (log_active(infoLong)) {
+        std::string msg = "Spot LTL formula: " + ltl;
+        Warning(infoLong, msg.c_str(), 0);
     }
-    else if (PINS_RABIN_TYPE == PINS_RABIN_TYPE_GEN) {
-      // generates four files, one for each rabin translator and a TGBA to TGRA one
-      std::string command = "echo \"" + ltl + "\" | tr \\# \\\" > /tmp/tmp.ltl"
-      + " && ltldo --relabel 'ltl3dra' -F /tmp/tmp.ltl | autfilt --generalized-rabin=share-inf > /tmp/ltl3dra.hoa";
-
-      if (system(command.c_str()))
-        Warning(info,"Could not use system command for ltl3dra");
-
-      command = "echo \"" + ltl + "\" | tr \\# \\\" > /tmp/tmp.ltl"
-      + " && ltldo --relabel 'ltl3hoa' -F /tmp/tmp.ltl | autfilt --generalized-rabin=share-inf > /tmp/ltl3hoa.hoa";
-
-      if (system(command.c_str()))
-        Warning(info,"Could not use system command for ltl3hoa");
-
-      command = "echo \"" + ltl + "\" | tr \\# \\\" > /tmp/tmp.ltl"
-      + " && cat /tmp/tmp.ltl | ltldo --relabel 'rabinizer3 -silent -format=hoa -in=formula -out=std %[RWMei^]f > %O'"
-      + " | autfilt --generalized-rabin=share-inf > /tmp/rabinizer3.hoa";
-
-      if (system(command.c_str()))
-        Warning(info, "Could not use system command for rabinizer3");
-
-      command = "echo \"" + ltl + "\" | tr \\# \\\" > /tmp/tmp.ltl"
-      + " && cat /tmp/tmp.ltl | ltl2tgba | autfilt --generalized-rabin > /tmp/tgbarabin.hoa";
-
-      if (system(command.c_str()))
-        Warning(info, "Problems occurred when constructing a TGBA-TGRA");
-
-      Abort("Finished generating rabin!");
-    }
-    else {
-      // use a system call to get the Rabin automaton from the LTL formula
-      std::string command = "echo \"" + ltl + "\" | tr \\# \\\" > /tmp/tmp.ltl";
-
-      if (PINS_RABIN_TYPE == PINS_RABIN_TYPE_LTL3DRA) {
-        command += " && ltldo --relabel 'ltl3dra' -F /tmp/tmp.ltl | autfilt --generalized-rabin=share-inf > /tmp/tmp.hoa";
-      }
-      else if (PINS_RABIN_TYPE == PINS_RABIN_TYPE_LTL3HOA) {
-        command += " && ltldo --relabel 'ltl3hoa' -F /tmp/tmp.ltl | autfilt --generalized-rabin=share-inf > /tmp/tmp.hoa";
-      }
-      else if (PINS_RABIN_TYPE == PINS_RABIN_TYPE_RABINIZER) {
-        command += " && cat /tmp/tmp.ltl | ltldo --relabel 'rabinizer3 -silent -format=hoa -in=formula -out=std %[RWMei^]f > %O' | autfilt --generalized-rabin=share-inf > /tmp/tmp.hoa";
-      }
-      else {
-        Abort("Could not detect the rabin translator used");
-      }
-
-      std::cerr << "system command: " << command << std::endl;
-      if (system(command.c_str())) {
-        Abort("Could not use system command");
-      }
-    }
-
-    // read HOA output
-    std::ifstream hoa_file ("/tmp/tmp.hoa");
-    create_ltsmin_rabin(hoa_file, NULL, NULL);
-
-  } else {
 
     // use Spot to parse the LTL and create an automata
     spot::parsed_formula f = spot::parse_infix_psl(ltl);
@@ -462,29 +370,24 @@ ltsmin_ltl2spot(ltsmin_expr_t e, ltsmin_parse_env_t env)
 
     spot::translator trans;
     if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA) {
-      isTGBA = true;
-      trans.set_type(spot::postprocessor::TGBA);
+        isTGBA = true;
+        trans.set_type(spot::postprocessor::TGBA);
     } else if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_SPOTBA)
-      trans.set_type(spot::postprocessor::BA);
+        trans.set_type(spot::postprocessor::BA);
     //trans.set_pref(spot::postprocessor::Deterministic);
 
     // create the automaton
     spot_automaton = trans.run(f.f);
-  }
-  // free
-  RTfree(buff);
+    // free
+    RTfree(buff);
 }
 
 
 ltsmin_buchi_t *
-ltsmin_hoa_buchi(ltsmin_parse_env_t env)
+ltsmin_spot_buchi(ltsmin_parse_env_t env)
 {
-    parse_file(NULL);
-  if (PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_RABIN) {
-    return cons->get_ltsmin_buchi();
-  } else {
+    //parse_file(NULL);
     return create_ltsmin_buchi(spot_automaton, env);
-  }
 }
 
 
