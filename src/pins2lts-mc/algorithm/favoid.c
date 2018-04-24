@@ -105,7 +105,7 @@ void
 favoid_local_init (run_t *run, wctx_t *ctx)
 {
     ctx->local = RTmallocZero (sizeof (alg_local_t) );
-    
+
     ctx->local->target = state_info_create ();
     ctx->local->root   = state_info_create ();
 
@@ -145,7 +145,7 @@ favoid_local_init (run_t *run, wctx_t *ctx)
         ctx->local->cnt[i].fstates                 = 0;
     }
 
-    (void) run; 
+    (void) run;
 }
 
 
@@ -180,6 +180,8 @@ favoid_handle (void *arg, state_info_t *successor, transition_info_t *ti,
     if (ti->labels != NULL) {
 
         acc_set = ti->labels[pins_get_accepting_set_edge_label_index(ctx->model)];
+
+        //Warning(info, "%zu --> %zu (%d)", ctx->state->ref, successor->ref, acc_set);
 
         // avoid and store successors of F transitions
         if (loc->rabin_pair_f & acc_set) {
@@ -291,7 +293,7 @@ favoid_init  (wctx_t *ctx, ref_t init_state)
     ctx->state->ref = DUMMY_IDX;
     favoid_handle (ctx, loc->target, &ti, 0);
     claim = uf_make_claim (shared->pairs[pair_struct_id].uf, init_state + 1, ctx->id);
-    
+
     state_data = dfs_stack_top (loc->search_stack);
     state_info_deserialize (ctx->state, state_data); // search_stack TOP
     transitions = explore_state(ctx);
@@ -491,7 +493,7 @@ backtrack (wctx_t *ctx)
 
         // we may still have states on the stack of this SCC
         if ( uf_sameset (shared->pairs[pair_struct_id].uf, loc->target->ref + 1, ctx->state->ref + 1) ) {
-            return; // backtrack in same set 
+            return; // backtrack in same set
             // (the state got marked dead AFTER the previous sameset check)
         }
 
@@ -522,7 +524,7 @@ favoid_check_pair_aux (wctx_t *ctx, run_t *run, ref_t init_state)
 {
     alg_local_t        *loc       = ctx->local;
     raw_data_t          state_data;
-    
+
     favoid_init (ctx, init_state);
 
     // continue until we are done exploring the graph or interrupted
@@ -574,9 +576,9 @@ favoid_check_pair (wctx_t *ctx, run_t *run)
     // check all states that we have avoided
     while (!iterset_is_empty (shared->pairs[pair_struct_id].is)) {
 
-        if (run_is_stopped(run)) 
+        if (run_is_stopped(run))
             return false;
-        
+
         ref_t new_init;
         is_pick_e pick = iterset_pick_state (shared->pairs[pair_struct_id].is, &new_init);
         if (pick != IS_PICK_SUCCESS) { // list got empty while picking a state
@@ -623,7 +625,7 @@ favoid_run  (run_t *run, wctx_t *ctx)
 
     int number_of_pairs = GBgetRabinNPairs();
 
-    
+
     int start_pair = ctx->id % number_of_pairs;
     if (PINS_RABIN_PAIR_ORDER == PINS_RABIN_PAIR_SEQ)
         start_pair = 0;
@@ -653,12 +655,12 @@ favoid_run  (run_t *run, wctx_t *ctx)
             // reset the local stacks
             dfs_stack_clear (loc->search_stack);
             dfs_stack_clear (loc->roots_stack);
-            
+
             if (PINS_RABIN_PAIR_ORDER == PINS_RABIN_PAIR_SEQ) {
-                    
+
                 // barrier
                 HREbarrier(HREglobal());
-                
+
                 if (ctx->id == 0) {
                     Warning(info, "Empty product in pair %d", i);
                     uf_clear(shared->pairs[0].uf);
@@ -732,7 +734,7 @@ favoid_print_stats   (run_t *run, wctx_t *ctx)
         claimdead += reduced[i].claimdead;
         claimfound += reduced[i].claimfound;
         claimsuccess += reduced[i].claimsuccess;
-        if (reduced[i].cum_max_stack > cum_max_stack) 
+        if (reduced[i].cum_max_stack > cum_max_stack)
         cum_max_stack = reduced[i].cum_max_stack;
         fstates += reduced[i].fstates;
     }
@@ -795,7 +797,7 @@ favoid_shared_init   (run_t *run)
 
     set_alg_local_init    (run->alg, favoid_local_init);
     set_alg_global_init   (run->alg, favoid_global_init);
-    set_alg_global_deinit (run->alg, favoid_global_deinit); 
+    set_alg_global_deinit (run->alg, favoid_global_deinit);
     set_alg_local_deinit  (run->alg, favoid_local_deinit);
     set_alg_print_stats   (run->alg, favoid_print_stats);
     set_alg_run           (run->alg, favoid_run);
@@ -825,7 +827,7 @@ favoid_shared_init   (run_t *run)
 }
 
 
-static void 
+static void
 report_counterexample   (wctx_t *ctx)
 {
     int master = run_stop (ctx->run);

@@ -134,19 +134,24 @@ public:
     }
   }
 
+  int g_pair_id = 0;
+
   /* recursive auxiliary function to derive the acceptance conditions */
-  void recurAcceptance(acceptance_expr::ptr accExpr, int pair_id) {
+  void recurAcceptance(acceptance_expr::ptr accExpr) {
+    //std::cout << "recuracceptance " << g_pair_id << std::endl;
     if (accExpr->isAND()) {
       // rabin pair = FIN & INF & INF & INF ...
-      recurAcceptance(accExpr->getLeft(), pair_id);
+      recurAcceptance(accExpr->getLeft());
       //std::cout << " AND ";
-      recurAcceptance(accExpr->getRight(), pair_id);
+      //std::cout << g_pair_id << " AND " << std::endl;
+      recurAcceptance(accExpr->getRight());
     }
     else if (accExpr->isOR()) {
       // new rabin pair
-      recurAcceptance(accExpr->getLeft(), pair_id);
-      //std::cout << " OR ";
-      recurAcceptance(accExpr->getRight(), pair_id+1);
+      recurAcceptance(accExpr->getLeft());
+      //std::cout << " OR " << g_pair_id << std::endl;
+      g_pair_id ++;
+      recurAcceptance(accExpr->getRight());
     }
     else {
       HREassert(accExpr->isAtom(), "Unknown acceptance condition"); // we only allow AND and Atoms
@@ -156,14 +161,14 @@ public:
       // decide if its FIN or INF
       uint32_t acc_mark = ( 1 << ((uint32_t) atom.getAcceptanceSet()));
       if (atom.getType() == AtomAcceptance::AtomType::TEMPORAL_FIN) {
-        //std::cout << " FIN:" << acc_mark << " ";
-        ba->rabin->pairs[pair_id].fin_set |= acc_mark;
+        //std::cout << " FIN:" << acc_mark << " " << std::endl;
+        ba->rabin->pairs[g_pair_id].fin_set |= acc_mark;
         ba->acceptance_set |= acc_mark;
 
       }
       else if (atom.getType() == AtomAcceptance::AtomType::TEMPORAL_INF) {
-        //std::cout << " INF:" << acc_mark << " ";
-        ba->rabin->pairs[pair_id].inf_set |= acc_mark;
+        //std::cout << " INF:" << acc_mark << " " << std::endl;
+        ba->rabin->pairs[g_pair_id].inf_set |= acc_mark;
         ba->acceptance_set |= acc_mark;
       }
       else {
@@ -226,7 +231,8 @@ public:
         PINS_BUCHI_TYPE = PINS_BUCHI_TYPE_FINLESS;
     }
 
-    recurAcceptance(accExpr,0);
+    g_pair_id = 0;
+    recurAcceptance(accExpr);
     //std::cout << std::endl;
     (void) numberOfSets;
   }
