@@ -109,6 +109,8 @@ public:
             for (unsigned long i=0; i<ap_name.length(); i++) {
                 if (ap_name[i] == '.') tmp += '\\';
                 if (ap_name[i] == '-') tmp += '\\';
+                if (ap_name[i] == '[') tmp += '\\';
+                if (ap_name[i] == ']') tmp += '\\';
                 tmp += ap_name[i];
             }
             //std::cout << "Changed '" << ap_name << "' to '" << tmp << "'" << std::endl;
