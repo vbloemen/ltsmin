@@ -655,6 +655,7 @@ favoid_run  (run_t *run, wctx_t *ctx)
             // reset the local stacks
             dfs_stack_clear (loc->search_stack);
             dfs_stack_clear (loc->roots_stack);
+            loc->add_state_idx = 0;
 
             if (PINS_RABIN_PAIR_ORDER == PINS_RABIN_PAIR_SEQ) {
 
