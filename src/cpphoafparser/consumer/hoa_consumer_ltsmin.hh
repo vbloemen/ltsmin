@@ -22,6 +22,7 @@ extern "C" {
 #include <ltsmin-lib/ltsmin-syntax.h>
 #include <ltsmin-lib/ltsmin-tl.h>
 #include <ltsmin-lib/ltsmin-buchi.h>
+#include <pins-lib/pins2pins-ltl.h>
 }
 
 #include <iostream>
@@ -29,7 +30,6 @@ extern "C" {
 #include <vector>
 #include <string>
 
-#include <ltsmin-lib/ltl2spot.h>
 
 #include <cpphoafparser/consumer/hoa_consumer.hh>
 #include <cpphoafparser/parser/hoa_parser_helper.hh>
@@ -228,7 +228,12 @@ public:
         PINS_BUCHI_TYPE = PINS_BUCHI_TYPE_RABIN;
     } else if (n_pairs == 1) {
         // Rabin pair is set, but not used (acceptance_set is sufficient)
-        PINS_BUCHI_TYPE = PINS_BUCHI_TYPE_TGBA; // maybe also filter out BA
+        // ba->accept is for state-based acceptance
+        if (s_acc) {
+            PINS_BUCHI_TYPE = PINS_BUCHI_TYPE_BA;
+        } else {
+            PINS_BUCHI_TYPE = PINS_BUCHI_TYPE_TGBA;
+        }
     } else {
         PINS_BUCHI_TYPE = PINS_BUCHI_TYPE_FINLESS;
     }
@@ -296,6 +301,10 @@ public:
       for (unsigned int acc : *accSignature) {
         s_acc |= (1 << acc);
       }
+    }
+    if (s_acc){
+        // state-based acceptance
+        PINS_BUCHI_TYPE = PINS_BUCHI_TYPE_BA;
     }
     (void) id;
     (void) info;
@@ -395,7 +404,7 @@ public:
     ltsmin_buchi_state_t * bs = NULL;
     bs = (ltsmin_buchi_state_t*) RTmalloc(sizeof(ltsmin_buchi_state_t) + transition_count * sizeof(ltsmin_buchi_transition_t));
     bs->transition_count = transition_count;
-    bs->accept = s_acc;
+    bs->accept = s_acc; // state-based acceptance
 
     int n_trans = 0;
     for (uint32_t i=0; i<transitions.size(); i+=4) {
