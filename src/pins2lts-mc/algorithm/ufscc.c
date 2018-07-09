@@ -151,7 +151,7 @@ ufscc_handle (void *arg, state_info_t *successor, transition_info_t *ti,
     raw_data_t          stack_loc;
     uint32_t            acc_set   = 0;
 
-    mclog_add(ctx->id, HANDLE_SUC_START);
+    mclog_add(ctx->id, HANDLE_SUC_START, ctx->state->ref, successor->ref);
 
     // TGBA acceptance
     if (ti->labels != NULL && PINS_BUCHI_TYPE == PINS_BUCHI_TYPE_TGBA) {
@@ -475,9 +475,9 @@ ufscc_run  (run_t *run, wctx_t *ctx)
     ProfilerStart ("ufscc.perf");
 #endif
 
-    mclog_add(ctx->id, INIT_START);
+    mclog_add(ctx->id, INIT_START, ctx->initial->ref, DUMMY_REF);
     ufscc_init (ctx);
-    mclog_add(ctx->id, INIT_END);
+    mclog_add(ctx->id, INIT_END, ctx->initial->ref, DUMMY_REF);
 
     // continue until we are done exploring the graph or interrupted
     while ( !run_is_stopped(run) ) {
@@ -490,9 +490,9 @@ ufscc_run  (run_t *run, wctx_t *ctx)
             // store state in ctx->state
             state_info_deserialize (ctx->state, state_data);
 
-            mclog_add(ctx->id, SUCCESSOR_START);
+            mclog_add(ctx->id, SUCCESSOR_START, ctx->state->ref, DUMMY_REF);
             successor (ctx);
-            mclog_add(ctx->id, SUCCESSOR_END);
+            mclog_add(ctx->id, SUCCESSOR_END, ctx->state->ref, DUMMY_REF);
         }
         else {
             // there is no state on the current stackframe ==> backtrack
@@ -501,9 +501,9 @@ ufscc_run  (run_t *run, wctx_t *ctx)
             if (0 == dfs_stack_nframes (loc->search_stack))
                 break;
 
-            mclog_add(ctx->id, BACKTRACK_START);
+            mclog_add(ctx->id, BACKTRACK_START, ctx->state->ref, DUMMY_REF);
             backtrack (ctx);
-            mclog_add(ctx->id, BACKTRACK_END);
+            mclog_add(ctx->id, BACKTRACK_END, ctx->state->ref, DUMMY_REF);
         }
     }
 
