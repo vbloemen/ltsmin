@@ -4,11 +4,12 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <limits.h>
 
 struct mclog_entry_s
 {
     int thread_id;
-    long time;
+    long long time; // needs to be a 64 bit number
     section_id sec_id;
     size_t state_a;
     size_t state_b;
@@ -76,10 +77,10 @@ void mclog_print_file (const char *file)
     for (int i=0; i<mclog_threads; i++) cur_cntrs[i] = 1;
 
     int min_thread_id = 0;
-    long min_time;
+    long long min_time;
     while (min_thread_id != -1) {
         min_thread_id = -1;
-        min_time = 2147483647;
+        min_time = LLONG_MAX;
         for (int i=0; i<mclog_threads; i++) {
             if (cur_cntrs[i] >= mclog_counters[i]) continue;
 
@@ -92,7 +93,7 @@ void mclog_print_file (const char *file)
 
         if (min_thread_id != -1) {
             mclog_entry_t entry = mclog[min_thread_id][cur_cntrs[min_thread_id]];
-            fprintf(f, "%zu,%d,%s,%ld,%ld\n",
+            fprintf(f, "%lld,%d,%s,%ld,%ld\n",
                 entry.time, entry.thread_id, section_id_str(entry.sec_id),
                 state_print(entry.state_a), state_print(entry.state_b));
             cur_cntrs[min_thread_id] ++;
@@ -106,9 +107,6 @@ void mclog_print_file (const char *file)
 
 void mclog_add (int thread_id, section_id id, size_t state_a, size_t state_b)
 {
-    // exit if it is not a successor event
-    if (id != SUCCESSOR_START && id != SUCCESSOR_END) return;
-
     struct timespec time;
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time);
     if (mclog_counters[thread_id] > mclog_max_size + 1) {
@@ -119,7 +117,7 @@ void mclog_add (int thread_id, section_id id, size_t state_a, size_t state_b)
     if (c_id == 0) {
         // add extra initial entry (for timing basis)
         mclog[thread_id][0].thread_id = thread_id;
-        mclog[thread_id][0].time      = time.tv_nsec;
+        mclog[thread_id][0].time      = (long long)time.tv_nsec + ((long long)time.tv_sec * 1000000000);
         mclog[thread_id][0].sec_id    = MCLOG_INIT;
         mclog[thread_id][0].state_a   = state_a;
         mclog[thread_id][0].state_b   = state_b;
@@ -127,7 +125,7 @@ void mclog_add (int thread_id, section_id id, size_t state_a, size_t state_b)
     }
 
     mclog[thread_id][c_id].thread_id = thread_id;
-    mclog[thread_id][c_id].time      = time.tv_nsec - mclog[thread_id][0].time;
+    mclog[thread_id][c_id].time      = (long long)time.tv_nsec  + ((long long)time.tv_sec * 1000000000) - mclog[thread_id][0].time;
     mclog[thread_id][c_id].sec_id    = id;
     mclog[thread_id][c_id].state_a   = state_a;
     mclog[thread_id][c_id].state_b   = state_b;

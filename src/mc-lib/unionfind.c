@@ -96,7 +96,7 @@ uf_is_in_list (const uf_t *uf, ref_t state, int thread_id)
 pick_e
 uf_pick_from_list (const uf_t *uf, ref_t state, ref_t *ret, int thread_id)
 {
-    mclog_add(thread_id, PICK_FROM_LIST_START, state-1, DUMMY_REF);
+    //mclog_add(thread_id, PICK_FROM_LIST_START, state-1, DUMMY_REF);
 
     // invariant: every consecutive non-LOCK state is in the same set
     ref_t               a, b, c;
@@ -114,7 +114,7 @@ uf_pick_from_list (const uf_t *uf, ref_t state, ref_t *ret, int thread_id)
             // return directly if a is LIVE
             if (a_status == LIST_LIVE) {
                 *ret = a;
-                mclog_add(thread_id, PICK_FROM_LIST_END_ALIVE, state-1, a-1);
+                //mclog_add(thread_id, PICK_FROM_LIST_END_ALIVE, state-1, a-1);
                 return PICK_SUCCESS;
             }
 
@@ -129,7 +129,7 @@ uf_pick_from_list (const uf_t *uf, ref_t state, ref_t *ret, int thread_id)
         // if a is TOMB and only element, then the SCC is DEAD
 
         if (a == b || b == 0) {
-            mclog_add(thread_id, PICK_FROM_LIST_END_DEAD, state-1, DUMMY_REF);
+            //mclog_add(thread_id, PICK_FROM_LIST_END_DEAD, state-1, DUMMY_REF);
             if ( uf_mark_dead (uf, a, thread_id) )
                 return PICK_MARK_DEAD;
             return PICK_DEAD;
@@ -142,7 +142,7 @@ uf_pick_from_list (const uf_t *uf, ref_t state, ref_t *ret, int thread_id)
             // return directly if b is LIVE
             if (b_status == LIST_LIVE) {
                 *ret = b;
-                mclog_add(thread_id, PICK_FROM_LIST_END_BLIVE, state-1, DUMMY_REF);
+                //mclog_add(thread_id, PICK_FROM_LIST_END_BLIVE, state-1, DUMMY_REF);
                 return PICK_SUCCESS;
             }
 
@@ -168,7 +168,7 @@ uf_pick_from_list (const uf_t *uf, ref_t state, ref_t *ret, int thread_id)
 bool
 uf_remove_from_list (const uf_t *uf, ref_t state, int thread_id)
 {
-    mclog_add(thread_id, REMOVE_FROM_LIST_START, state-1, DUMMY_REF);
+    //mclog_add(thread_id, REMOVE_FROM_LIST_START, state-1, DUMMY_REF);
     list_status         list_s;
 
     // only remove list item if it is LIVE , otherwise (LIST_LOCK) wait
@@ -176,11 +176,11 @@ uf_remove_from_list (const uf_t *uf, ref_t state, int thread_id)
         list_s = atomic_read (&uf->array[state].list_status);
         if (list_s == LIST_LIVE) {
             if (cas (&uf->array[state].list_status, LIST_LIVE, LIST_TOMB) ) {
-                mclog_add(thread_id, REMOVE_FROM_LIST_END_LIVE, state-1, DUMMY_REF);
+                //mclog_add(thread_id, REMOVE_FROM_LIST_END_LIVE, state-1, DUMMY_REF);
                 return 1;
             }
         } else if (list_s == LIST_TOMB){
-            mclog_add(thread_id, REMOVE_FROM_LIST_END_DEAD, state-1, DUMMY_REF);
+            //mclog_add(thread_id, REMOVE_FROM_LIST_END_DEAD, state-1, DUMMY_REF);
             return 0;
         }
     }
@@ -213,7 +213,7 @@ uf_owner (const uf_t *uf, ref_t state, size_t worker)
 char
 uf_make_claim (const uf_t *uf, ref_t state, size_t worker)
 {
-    mclog_add(worker, MAKE_CLAIM_START, state-1, DUMMY_REF);
+    //mclog_add(worker, MAKE_CLAIM_START, state-1, DUMMY_REF);
     HREassert (worker < WORKER_BITS);
 
     sz_w                w_id   = 1ULL << worker;
@@ -222,13 +222,13 @@ uf_make_claim (const uf_t *uf, ref_t state, size_t worker)
 
     // is the state dead?
     if (atomic_read (&uf->array[f].uf_status) == UF_DEAD) {
-        mclog_add(worker, MAKE_CLAIM_END_DEAD, state-1, DUMMY_REF);
+        //mclog_add(worker, MAKE_CLAIM_END_DEAD, state-1, DUMMY_REF);
         return CLAIM_DEAD;
     }
 
     // did we previously explore a state in this SCC?
     if ( (atomic_read (&uf->array[f].p_set) & w_id ) != 0) {
-        mclog_add(worker, MAKE_CLAIM_END_VIS, state-1, DUMMY_REF);
+        //mclog_add(worker, MAKE_CLAIM_END_VIS, state-1, DUMMY_REF);
         return CLAIM_FOUND;
         // NB: cycle is possibly missed (in case f got updated)
         // - however, next iteration should detect this
@@ -240,7 +240,7 @@ uf_make_claim (const uf_t *uf, ref_t state, size_t worker)
         f = uf_find (uf, f, worker);
         fetch_or (&uf->array[f].p_set, w_id);
     }
-    mclog_add(worker, MAKE_CLAIM_END_ADD, state-1, DUMMY_REF);
+    //mclog_add(worker, MAKE_CLAIM_END_ADD, state-1, DUMMY_REF);
     if (orig_pset == 0ULL)
         return CLAIM_FIRST;
     else
@@ -254,7 +254,7 @@ uf_make_claim (const uf_t *uf, ref_t state, size_t worker)
 ref_t
 uf_find (const uf_t *uf, ref_t state, int thread_id)
 {
-    mclog_add(thread_id, FIND_START, state-1, DUMMY_REF);
+    //mclog_add(thread_id, FIND_START, state-1, DUMMY_REF);
     // recursively find and update the parent (path compression)
     ref_t               x      = state;
     ref_t               parent = atomic_read (&uf->array[x].parent);
@@ -264,14 +264,14 @@ uf_find (const uf_t *uf, ref_t state, int thread_id)
         y = parent;
         parent = atomic_read (&uf->array[y].parent);
         if (parent == 0) {
-            mclog_add(thread_id, FIND_END, state-1, y-1);
+            //mclog_add(thread_id, FIND_END, state-1, y-1);
             return y;
         }
         atomic_write (&uf->array[x].parent, parent);
         x = parent;
         parent = atomic_read (&uf->array[x].parent);
     }
-    mclog_add(thread_id, FIND_END, state-1, x-1);
+    //mclog_add(thread_id, FIND_END, state-1, x-1);
     return x;
 }
 
@@ -282,25 +282,25 @@ uf_find (const uf_t *uf, ref_t state, int thread_id)
 bool
 uf_sameset (const uf_t *uf, ref_t a, ref_t b, int thread_id)
 {
-    mclog_add(thread_id, SAMESET_START, a-1, b-1);
+    //mclog_add(thread_id, SAMESET_START, a-1, b-1);
     // TODO: try to improve performance (if necessary)
     ref_t               a_r = uf_find (uf, a, thread_id);
     ref_t               b_r = uf_find (uf, b, thread_id);
 
     // return true if the representatives are equal
     if (a_r == b_r) {
-        mclog_add(thread_id, SAMESET_END_TRUE, a-1, b-1);
+        //mclog_add(thread_id, SAMESET_END_TRUE, a-1, b-1);
         return 1;
     }
 
     // return false if the parent for a has not been updated
     if (atomic_read (&uf->array[a_r].parent) == 0) {
-        mclog_add(thread_id, SAMESET_END_FALSE, a-1, b-1);
+        //mclog_add(thread_id, SAMESET_END_FALSE, a-1, b-1);
         return 0;
     }
     // otherwise retry
     else {
-        mclog_add(thread_id, SAMESET_END_RETRY, a-1, b-1);
+        //mclog_add(thread_id, SAMESET_END_RETRY, a-1, b-1);
         return uf_sameset (uf, a_r, b_r, thread_id);
     }
 }
@@ -432,7 +432,7 @@ uf_is_dead (const uf_t *uf, ref_t state, int thread_id)
 bool
 uf_mark_dead (const uf_t *uf, ref_t state, int thread_id)
 {
-    mclog_add(thread_id, MARK_DEAD_START, state-1, DUMMY_REF);
+    //mclog_add(thread_id, MARK_DEAD_START, state-1, DUMMY_REF);
     bool                result = false;
     ref_t               f      = uf_find (uf, state, thread_id);
     uf_status           status = atomic_read (&uf->array[f].uf_status);
@@ -447,7 +447,7 @@ uf_mark_dead (const uf_t *uf, ref_t state, int thread_id)
                "the parent of a DEAD representative should not change");
     HREassert (uf_is_dead (uf, state, thread_id), "state should be dead");
 
-    mclog_add(thread_id, MARK_DEAD_END, state-1, DUMMY_REF);
+    //mclog_add(thread_id, MARK_DEAD_END, state-1, DUMMY_REF);
     return result;
 }
 
@@ -466,14 +466,14 @@ uf_unlock_uf (const uf_t *uf, ref_t a, int thread_id)
 static bool
 uf_lock_uf (const uf_t *uf, ref_t a, int thread_id)
 {
-    mclog_add(thread_id, LOCK_UF_START, a-1, DUMMY_REF);
+    //mclog_add(thread_id, LOCK_UF_START, a-1, DUMMY_REF);
     if (atomic_read (&uf->array[a].uf_status) == UF_LIVE) {
        if (cas (&uf->array[a].uf_status, UF_LIVE, UF_LOCK)) {
 
            // successfully locked
            // ensure that we actually locked the representative
            if (atomic_read (&uf->array[a].parent) == 0) {
-                mclog_add(thread_id, LOCK_UF_END_SUCCESS, a-1, DUMMY_REF);
+                //mclog_add(thread_id, LOCK_UF_END_SUCCESS, a-1, DUMMY_REF);
                 return 1;
            }
 
@@ -481,7 +481,7 @@ uf_lock_uf (const uf_t *uf, ref_t a, int thread_id)
            atomic_write (&uf->array[a].uf_status, UF_LIVE);
        }
     }
-    mclog_add(thread_id, LOCK_UF_END_FAIL, a-1, DUMMY_REF);
+    //mclog_add(thread_id, LOCK_UF_END_FAIL, a-1, DUMMY_REF);
     return 0;
 }
 
@@ -496,17 +496,17 @@ uf_try_grab (const uf_t *uf, ref_t a)
 static bool
 uf_lock_list (const uf_t *uf, ref_t a, ref_t *a_l, int thread_id)
 {
-    mclog_add(thread_id, LOCK_LIST_START, a-1, DUMMY_REF);
+    //mclog_add(thread_id, LOCK_LIST_START, a-1, DUMMY_REF);
     char pick;
 
     while ( 1 ) {
         pick = uf_pick_from_list (uf, a, a_l, thread_id);
         if ( pick != PICK_SUCCESS ) {
-            mclog_add(thread_id, LOCK_LIST_END_FAIL, a-1, DUMMY_REF);
+            //mclog_add(thread_id, LOCK_LIST_END_FAIL, a-1, DUMMY_REF);
             return 0;
         }
         if (cas (&uf->array[*a_l].list_status, LIST_LIVE, LIST_LOCK) ) {
-            mclog_add(thread_id, LOCK_LIST_END_SUCCESS, a-1, DUMMY_REF);
+            //mclog_add(thread_id, LOCK_LIST_END_SUCCESS, a-1, DUMMY_REF);
             return 1;
         }
     }
