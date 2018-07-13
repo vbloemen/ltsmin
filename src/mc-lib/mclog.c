@@ -108,7 +108,7 @@ void mclog_print_file (const char *file)
 void mclog_add (int thread_id, section_id id, size_t state_a, size_t state_b)
 {
     struct timespec time;
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time);
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &time);
     if (mclog_counters[thread_id] > mclog_max_size + 1) {
         Abort("Log exceeded size limit");
     }
